@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'userName', 'userClass', 'stars', 'completedLessons', 'updatedAt'])
+        && data.userId is string && data.userId.size() <= 200
+        && data.userName is string && data.userName.size() <= 100
+        && data.userClass is string && data.userClass.size() <= 20
+        && (data.stars is int || data.stars is number) && data.stars >= 0
+        && data.completedLessons is list && data.completedLessons.size() <= 1000;
+    }
+
+    match /_health/{docId} {
+      allow read, write: if true;
+    }
+
+    match /users/{userId} {
+      // Allow public reading
+      allow get: if true;
+      // Allow public listing as long as it's filtered by class
+      allow list: if true; 
+      
+      // Allow creating/updating if data is valid and userId matches document path
+      allow create: if userId == request.resource.data.userId 
+        && isValidUser(request.resource.data);
+
+      allow update: if userId == request.resource.data.userId
+        && isValidUser(request.resource.data)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.userName == resource.data.userName
+        && request.resource.data.userClass == resource.data.userClass;
+    }
+  }
+}
