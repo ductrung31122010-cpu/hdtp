@@ -43,9 +43,7 @@ service cloud.firestore {
 
       allow update: if userId == request.resource.data.userId
         && isValidUser(request.resource.data)
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.userName == resource.data.userName
-        && request.resource.data.userClass == resource.data.userClass;
+        && request.resource.data.userId == resource.data.userId;
     }
   }
 }

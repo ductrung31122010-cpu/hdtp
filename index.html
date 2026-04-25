@@ -6,14 +6,44 @@
     <title>Leo rank Tin học 10 – Kết nối tri thức - Rank System</title>
     
     <!-- Libraries CDN -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js" crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.294.0/dist/umd/lucide.min.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            getDoc, 
+            query, 
+            where, 
+            onSnapshot,
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Expose to window for the React app
+        window.FirebaseModular = {
+            initializeApp,
+            getAuth,
+            onAuthStateChanged,
+            signInAnonymously,
+            getFirestore,
+            collection,
+            doc,
+            setDoc,
+            getDoc,
+            query,
+            where,
+            onSnapshot,
+            serverTimestamp
+        };
+    </script>
 
     <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
 
@@ -128,31 +158,38 @@
             if (dbInitPromise) return dbInitPromise;
             
             dbInitPromise = new Promise((resolve) => {
-                try {
-                    if (typeof firebase !== 'undefined') {
-                        console.log("Firebase: Library detected, initializing...");
-                        const app = firebase.initializeApp(firebaseConfig);
-                        auth = app.auth();
-                        const databaseId = firebaseConfig.firestoreDatabaseId || "ai-studio-1fdc8eb6-64dc-46d2-b357-5d0529f00a99";
-                        db = app.firestore(databaseId);
-                        
-                        console.log("Firebase: Firestore initialized (" + databaseId + ")");
-                        
-                        // Resolve immediately so UI can continue
-                        resolve(true);
-
-                        // Background health check
-                        db.collection('_health').doc('ping').set({ time: new Date() }, { merge: true })
-                            .then(() => console.log("Firebase: Connection health check OK"))
-                            .catch(e => console.warn("Firebase: Connection health check warning:", e.message));
-                    } else {
-                        console.error("Firebase: Library NOT FOUND in window!");
-                        resolve(false);
+                const checkInterval = setInterval(() => {
+                    if (window.FirebaseModular) {
+                        clearInterval(checkInterval);
+                        try {
+                            const fm = window.FirebaseModular;
+                            const app = fm.initializeApp(firebaseConfig);
+                            auth = fm.getAuth(app);
+                            
+                            const databaseId = firebaseConfig.firestoreDatabaseId;
+                            db = fm.getFirestore(app, databaseId);
+                            
+                            console.log("Firebase Modular: Initialized with DB ID: " + databaseId);
+                            
+                            // Background health check
+                            const healthDoc = fm.doc(db, '_health', 'ping');
+                            fm.setDoc(healthDoc, { time: fm.serverTimestamp() }, { merge: true })
+                                .then(() => console.log("Firebase Modular: Health check OK"))
+                                .catch(e => console.warn("Firebase Modular: Health check warning:", e.message));
+                            
+                            resolve(true);
+                        } catch (e) {
+                            console.error("Firebase Modular: Init error:", e);
+                            resolve(false);
+                        }
                     }
-                } catch (e) {
-                    console.error("Firebase: Init fatal crash:", e);
+                }, 100);
+                
+                // Timeout after 10s
+                setTimeout(() => {
+                    clearInterval(checkInterval);
                     resolve(false);
-                }
+                }, 10000);
             });
             return dbInitPromise;
         };
@@ -495,14 +532,13 @@
             useEffect(() => {
                 if (!auth) return;
                 try {
-                    const unsubscribe = auth.onAuthStateChanged(u => {
+                    const fm = window.FirebaseModular;
+                    const unsubscribe = fm.onAuthStateChanged(auth, u => {
                         if (u) {
                             setUser(u);
                         } else {
-                            // Only try if not already errored
-                            auth.signInAnonymously().catch(e => {
-                                // Silently log if disabled, no need to worry the user
-                                console.log("Firebase: Anonymous login restricted, using local session mode.");
+                            fm.signInAnonymously(auth).catch(e => {
+                                console.log("Firebase: Anonymous login restricted");
                             });
                         }
                     });
@@ -510,25 +546,25 @@
                 } catch (e) {
                     console.error("Auth init fatal error:", e);
                 }
-            }, []);
+            }, [isDbReady]);
 
             // Leaderboard Real-time updates
             useEffect(() => {
                 // Normalizing class name
                 const targetClass = (userStats.userClass || '').trim().toUpperCase();
                 if (!targetClass || !db || !isDbReady) {
-                    console.log("Leaderboard: Waiting for ready state...");
                     return;
                 }
                 
-                console.log("Leaderboard: Subscribing to [" + targetClass + "]");
-                
                 try {
-                    const q = db.collection('users').where('userClass', '==', targetClass);
+                    const fm = window.FirebaseModular;
+                    const q = fm.query(
+                        fm.collection(db, 'users'), 
+                        fm.where('userClass', '==', targetClass)
+                    );
 
-                    const unsubscribe = q.onSnapshot(snap => {
+                    const unsubscribe = fm.onSnapshot(q, snap => {
                         if (snap.empty) {
-                            console.log("Leaderboard: No users found for class [" + targetClass + "]");
                             setLeaderboard([]);
                             return;
                         }
@@ -536,7 +572,6 @@
                         const data = snap.docs.map(doc => {
                             const d = doc.data();
                             return { 
-                                id: doc.id, 
                                 userId: d.userId || doc.id,
                                 userName: d.userName || 'Ẩn danh',
                                 userClass: (d.userClass || '').toUpperCase(),
@@ -545,15 +580,14 @@
                                 updatedAt: d.updatedAt
                             };
                         });
-                        console.log("Leaderboard: Processed " + data.length + " users");
                         const sorted = data.sort((a, b) => {
                             const diff = b.stars - a.stars;
                             if (diff !== 0) return diff;
                             
-                            // Robust timestamp secondary sort
                             const getSecs = (ts) => {
                                 if (!ts) return 0;
                                 if (ts.seconds) return ts.seconds;
+                                if (ts.toDate) return ts.toDate().getTime() / 1000;
                                 if (ts instanceof Date) return ts.getTime() / 1000;
                                 return 0;
                             };
@@ -561,11 +595,11 @@
                         });
                         setLeaderboard(sorted.slice(0, 50));
                     }, err => {
-                        console.error("Leaderboard: Subscription error:", err);
+                        console.error("Leaderboard error:", err);
                     });
                     return () => unsubscribe();
                 } catch (e) {
-                    console.error("Leaderboard: Effect crash:", e);
+                    console.error("Leaderboard crash:", e);
                 }
             }, [userStats.userClass, isDbReady, db]);
 
@@ -582,6 +616,7 @@
                 setIsSaving(true);
                 
                 try {
+                    const fm = window.FirebaseModular;
                     let uid = user?.uid || localStorage.getItem('informatics_local_id');
                     if (!uid) {
                         uid = 'user_' + Math.random().toString(36).substr(2, 9);
@@ -606,14 +641,22 @@
                         const statsForDB = { 
                             ...statsForState,
                             stars: parseInt(statsForState.stars) || 0,
-                            updatedAt: (typeof firebase !== 'undefined' && firebase.firestore?.FieldValue?.serverTimestamp) 
-                                ? firebase.firestore.FieldValue.serverTimestamp() 
-                                : new Date()
+                            updatedAt: fm.serverTimestamp()
                         };
                         
-                        await db.collection('users').doc(uid).set(statsForDB, { merge: true });
-                        setSyncStatus('success');
-                        console.log("Cloud: Identity synced");
+                        fm.setDoc(fm.doc(db, 'users', uid), statsForDB, { merge: true })
+                            .then(() => {
+                                setSyncStatus('success');
+                            })
+                            .catch(e => {
+                                console.error("Sync failed:", e);
+                                setSyncStatus('error');
+                            });
+                        
+                        // Safety timeout
+                        setTimeout(() => {
+                            setSyncStatus(prev => prev === 'syncing' ? 'error' : prev);
+                        }, 10000);
                     }
                 } catch (err) {
                     console.error("Cloud: Identity sync failed:", err);
@@ -630,6 +673,7 @@
                 if (!uid || !db) return;
                 
                 try {
+                    const fm = window.FirebaseModular;
                     setSyncStatus('syncing');
                     const statsForDB = {
                         ...newStats,
@@ -637,17 +681,26 @@
                         userName: newStats.userName || 'Ẩn danh',
                         userClass: (newStats.userClass || '').toUpperCase(),
                         stars: parseInt(newStats.stars) || 0,
-                        updatedAt: (typeof firebase !== 'undefined' && firebase.firestore?.FieldValue?.serverTimestamp) 
-                            ? firebase.firestore.FieldValue.serverTimestamp() 
-                            : new Date()
+                        updatedAt: fm.serverTimestamp()
                     };
                     
-                    await db.collection('users').doc(uid).set(statsForDB, { merge: true });
-                    setSyncStatus('success');
-                    console.log("Cloud: Progress synced");
+                    fm.setDoc(fm.doc(db, 'users', uid), statsForDB, { merge: true })
+                        .then(() => {
+                            setSyncStatus('success');
+                        })
+                        .catch(e => {
+                            console.error("Progress sync failed:", e);
+                            setSyncStatus('error');
+                        });
+                    
+                    // Safety timeout
+                    setTimeout(() => {
+                        setSyncStatus(prev => prev === 'syncing' ? 'error' : prev);
+                    }, 10000);
                 } catch (e) {
                     setSyncStatus('error');
-                    console.error("Cloud: Progress sync failed:", e);
+                    console.error("Cloud: Progress sync crash:", e);
+                    setTimeout(() => setSyncStatus('idle'), 3000);
                 }
             };
 
