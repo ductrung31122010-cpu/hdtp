@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a student user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userClass": { "type": "string" },
+        "stars": { "type": "integer" },
+        "completedLessons": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "userClass", "stars", "completedLessons", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "The user's individual profile and progress"
+    }
+  }
+}
