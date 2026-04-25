@@ -117,7 +117,8 @@
           projectId: "gen-lang-client-0385112011",
           storageBucket: "gen-lang-client-0385112011.firebasestorage.app",
           messagingSenderId: "99711697274",
-          appId: "1:99711697274:web:a9a4a15394c7da4e4356c3"
+          appId: "1:99711697274:web:a9a4a15394c7da4e4356c3",
+          firestoreDatabaseId: "ai-studio-1fdc8eb6-64dc-46d2-b357-5d0529f00a99"
         };
         
         let auth, db;
@@ -125,9 +126,9 @@
             if (typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
                 auth = firebase.auth();
-                // FIX: Use standard compat API as suggested
-                db = firebase.firestore();
-                console.log("Firebase initialized successfully");
+                // Sử dụng đặt tên database ID chính xác để tránh lỗi (default) not found
+                db = firebase.app().firestore(firebaseConfig.firestoreDatabaseId);
+                console.log("Firebase initialized successfully with named database");
             } else {
                 console.error("Firebase library not found!");
             }
@@ -540,13 +541,17 @@
 
                     // Sync ngầm, không dùng await để tránh đứng máy
                     if (db && typeof db.collection === 'function') {
-                        const statsForDB = { ...statsForState };
-                        if (typeof firebase !== 'undefined' && firebase.firestore?.FieldValue?.serverTimestamp) {
-                            statsForDB.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-                        }
+                        const statsForDB = { 
+                            ...statsForState,
+                            stars: parseInt(statsForState.stars) || 0,
+                            updatedAt: (typeof firebase !== 'undefined' && firebase.firestore?.FieldValue?.serverTimestamp) 
+                                ? firebase.firestore.FieldValue.serverTimestamp() 
+                                : new Date()
+                        };
+                        
                         db.collection('users').doc(uid).set(statsForDB, { merge: true })
-                            .then(() => console.log("Sync success"))
-                            .catch(e => console.warn("Sync failed", e));
+                            .then(() => console.log("Sync success for user: " + finalName))
+                            .catch(e => console.error("Sync failed for user: " + finalName, e));
                     }
                 } catch (err) {
                     console.error("Critical Save Error:", err);
@@ -568,16 +573,19 @@
                 if (!uid || !db) return;
                 
                 try {
-                    await db.collection('users').doc(uid).set({
+                    const statsForDB = {
                         ...newStats,
                         userId: uid,
+                        stars: parseInt(newStats.stars) || 0,
                         updatedAt: (typeof firebase !== 'undefined' && firebase.firestore?.FieldValue?.serverTimestamp) 
                             ? firebase.firestore.FieldValue.serverTimestamp() 
-                            : new Date().toISOString()
-                    }, { merge: true });
-                    console.log("Dữ liệu đã được đồng bộ lên BXH");
+                            : new Date()
+                    };
+                    
+                    await db.collection('users').doc(uid).set(statsForDB, { merge: true });
+                    console.log("Dữ liệu đã được cập nhật lên hệ thống");
                 } catch (e) {
-                    console.error("Lỗi đồng bộ dữ liệu:", e);
+                    console.error("Lỗi đồng bộ tiến trình:", e);
                 }
             };
 
