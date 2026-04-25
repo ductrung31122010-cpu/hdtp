@@ -6,9 +6,9 @@
     <title>Leo rank Tin học 10 – Kết nối tri thức - Rank System</title>
     
     <!-- Libraries CDN -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
@@ -122,19 +122,40 @@
         };
         
         let auth, db;
-        try {
-            if (typeof firebase !== 'undefined') {
-                firebase.initializeApp(firebaseConfig);
-                auth = firebase.auth();
-                // Sử dụng đặt tên database ID chính xác để tránh lỗi (default) not found
-                db = firebase.app().firestore(firebaseConfig.firestoreDatabaseId);
-                console.log("Firebase initialized successfully with named database");
-            } else {
-                console.error("Firebase library not found!");
-            }
-        } catch (initError) {
-            console.error("Firebase init crash:", initError);
-        }
+        let dbInitPromise = null;
+
+        const initFirebase = () => {
+            if (dbInitPromise) return dbInitPromise;
+            
+            dbInitPromise = new Promise((resolve) => {
+                try {
+                    if (typeof firebase !== 'undefined') {
+                        console.log("Firebase: Library detected, initializing...");
+                        const app = firebase.initializeApp(firebaseConfig);
+                        auth = app.auth();
+                        const databaseId = firebaseConfig.firestoreDatabaseId || "ai-studio-1fdc8eb6-64dc-46d2-b357-5d0529f00a99";
+                        db = app.firestore(databaseId);
+                        
+                        console.log("Firebase: Firestore initialized (" + databaseId + ")");
+                        
+                        // Resolve immediately so UI can continue
+                        resolve(true);
+
+                        // Background health check
+                        db.collection('_health').doc('ping').set({ time: new Date() }, { merge: true })
+                            .then(() => console.log("Firebase: Connection health check OK"))
+                            .catch(e => console.warn("Firebase: Connection health check warning:", e.message));
+                    } else {
+                        console.error("Firebase: Library NOT FOUND in window!");
+                        resolve(false);
+                    }
+                } catch (e) {
+                    console.error("Firebase: Init fatal crash:", e);
+                    resolve(false);
+                }
+            });
+            return dbInitPromise;
+        };
 
         // --- CONSTANTS ---
         const RANKS = [
@@ -434,9 +455,18 @@
             const [activeLessonId, setActiveLessonId] = useState('c1-l1');
             const [tab, setTab] = useState('study');
             const [mobileMenu, setMobileMenu] = useState(false);
+            const [isDbReady, setIsDbReady] = useState(false);
             const [user, setUser] = useState(null);
             const [leaderboard, setLeaderboard] = useState([]);
             const [isSaving, setIsSaving] = useState(false);
+            const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'syncing', 'success', 'error'
+
+            // Initialize Firebase once
+            useEffect(() => {
+                initFirebase().then(ready => {
+                    setIsDbReady(ready);
+                });
+            }, []);
             
             const [userStats, setUserStats] = useState(() => {
                 const saved = localStorage.getItem('informatics_ranks_final');
@@ -471,11 +501,8 @@
                         } else {
                             // Only try if not already errored
                             auth.signInAnonymously().catch(e => {
-                                if (e.code === 'auth/admin-restricted-operation' || e.code === 'auth/operation-not-allowed') {
-                                    console.warn("Firebase Anonymous Auth is disabled. Using local identity instead.");
-                                } else {
-                                    console.error("Auth Error:", e);
-                                }
+                                // Silently log if disabled, no need to worry the user
+                                console.log("Firebase: Anonymous login restricted, using local session mode.");
                             });
                         }
                     });
@@ -487,28 +514,65 @@
 
             // Leaderboard Real-time updates
             useEffect(() => {
-                if (!userStats.userClass || !db) return;
+                // Normalizing class name
+                const targetClass = (userStats.userClass || '').trim().toUpperCase();
+                if (!targetClass || !db || !isDbReady) {
+                    console.log("Leaderboard: Waiting for ready state...");
+                    return;
+                }
+                
+                console.log("Leaderboard: Subscribing to [" + targetClass + "]");
+                
                 try {
-                    const q = db.collection('users')
-                        .where('userClass', '==', userStats.userClass.trim());
+                    const q = db.collection('users').where('userClass', '==', targetClass);
 
                     const unsubscribe = q.onSnapshot(snap => {
-                        const data = snap.docs.map(doc => doc.data());
-                        const sorted = data.sort((a, b) => (parseInt(b.stars) || 0) - (parseInt(a.stars) || 0));
+                        if (snap.empty) {
+                            console.log("Leaderboard: No users found for class [" + targetClass + "]");
+                            setLeaderboard([]);
+                            return;
+                        }
+                        
+                        const data = snap.docs.map(doc => {
+                            const d = doc.data();
+                            return { 
+                                id: doc.id, 
+                                userId: d.userId || doc.id,
+                                userName: d.userName || 'Ẩn danh',
+                                userClass: (d.userClass || '').toUpperCase(),
+                                stars: parseInt(d.stars) || 0,
+                                completedLessons: d.completedLessons || [],
+                                updatedAt: d.updatedAt
+                            };
+                        });
+                        console.log("Leaderboard: Processed " + data.length + " users");
+                        const sorted = data.sort((a, b) => {
+                            const diff = b.stars - a.stars;
+                            if (diff !== 0) return diff;
+                            
+                            // Robust timestamp secondary sort
+                            const getSecs = (ts) => {
+                                if (!ts) return 0;
+                                if (ts.seconds) return ts.seconds;
+                                if (ts instanceof Date) return ts.getTime() / 1000;
+                                return 0;
+                            };
+                            return getSecs(b.updatedAt) - getSecs(a.updatedAt);
+                        });
                         setLeaderboard(sorted.slice(0, 50));
                     }, err => {
-                        console.error("Leaderboard fetch error:", err);
+                        console.error("Leaderboard: Subscription error:", err);
                     });
                     return () => unsubscribe();
                 } catch (e) {
-                    console.error("Snapshot attachment error:", e);
+                    console.error("Leaderboard: Effect crash:", e);
                 }
-            }, [userStats.userClass]);
+            }, [userStats.userClass, isDbReady, db]);
 
             // Sync Identity to Firestore
             const saveIdentity = async () => {
                 const finalName = (tempName || "").trim();
-                const finalClass = (tempClass || "").trim();
+                const finalClass = (tempClass || "").trim().toUpperCase();
                 
                 if (!finalName || !finalClass) {
                     alert("Vui lòng điền đầy đủ tên và chọn lớp!");
@@ -518,13 +582,10 @@
                 setIsSaving(true);
                 
                 try {
-                    let uid = user?.uid;
+                    let uid = user?.uid || localStorage.getItem('informatics_local_id');
                     if (!uid) {
-                        uid = localStorage.getItem('informatics_local_id');
-                        if (!uid) {
-                            uid = 'user_' + Math.random().toString(36).substr(2, 9);
-                            localStorage.setItem('informatics_local_id', uid);
-                        }
+                        uid = 'user_' + Math.random().toString(36).substr(2, 9);
+                        localStorage.setItem('informatics_local_id', uid);
                     }
 
                     const statsForState = { 
@@ -535,12 +596,13 @@
                         updatedAt: new Date().toISOString()
                     };
 
-                    // Cập nhật state local ngay lập tức để user vào app luôn
+                    // Update UI immediately
                     setUserStats(statsForState);
                     setShowSetup(false);
 
-                    // Sync ngầm, không dùng await để tránh đứng máy
-                    if (db && typeof db.collection === 'function') {
+                    // Sync to Cloud
+                    if (db) {
+                        setSyncStatus('syncing');
                         const statsForDB = { 
                             ...statsForState,
                             stars: parseInt(statsForState.stars) || 0,
@@ -549,18 +611,13 @@
                                 : new Date()
                         };
                         
-                        db.collection('users').doc(uid).set(statsForDB, { merge: true })
-                            .then(() => console.log("Sync success for user: " + finalName))
-                            .catch(e => console.error("Sync failed for user: " + finalName, e));
+                        await db.collection('users').doc(uid).set(statsForDB, { merge: true });
+                        setSyncStatus('success');
+                        console.log("Cloud: Identity synced");
                     }
                 } catch (err) {
-                    console.error("Critical Save Error:", err);
-                    // Dù lỗi sync vẫn cho user vào app bằng local data
-                    setUserStats({
-                        ...userStats,
-                        userName: finalName,
-                        userClass: finalClass
-                    });
+                    console.error("Cloud: Identity sync failed:", err);
+                    setSyncStatus('error');
                     setShowSetup(false);
                 } finally {
                     setIsSaving(false);
@@ -573,9 +630,12 @@
                 if (!uid || !db) return;
                 
                 try {
+                    setSyncStatus('syncing');
                     const statsForDB = {
                         ...newStats,
                         userId: uid,
+                        userName: newStats.userName || 'Ẩn danh',
+                        userClass: (newStats.userClass || '').toUpperCase(),
                         stars: parseInt(newStats.stars) || 0,
                         updatedAt: (typeof firebase !== 'undefined' && firebase.firestore?.FieldValue?.serverTimestamp) 
                             ? firebase.firestore.FieldValue.serverTimestamp() 
@@ -583,9 +643,11 @@
                     };
                     
                     await db.collection('users').doc(uid).set(statsForDB, { merge: true });
-                    console.log("Dữ liệu đã được cập nhật lên hệ thống");
+                    setSyncStatus('success');
+                    console.log("Cloud: Progress synced");
                 } catch (e) {
-                    console.error("Lỗi đồng bộ tiến trình:", e);
+                    setSyncStatus('error');
+                    console.error("Cloud: Progress sync failed:", e);
                 }
             };
 
@@ -676,6 +738,14 @@
                                 </button>
                             )}
                             <div className="flex items-center gap-4 bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-lg shadow-slate-200/50 dark:shadow-none">
+                                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-2xl border border-slate-100 dark:border-slate-700 relative group">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${isDbReady ? (syncStatus === 'error' ? 'bg-red-500' : syncStatus === 'syncing' ? 'bg-yellow-500 animate-pulse' : 'bg-green-500') : 'bg-slate-300'}`}></div>
+                                    <LucideIcon name="cloud" className={`w-4 h-4 ${isDbReady ? 'text-blue-500' : 'text-slate-400'}`} />
+                                    {syncStatus === 'syncing' && <span className="text-[8px] font-black text-slate-400 animate-pulse">ĐANG LƯU...</span>}
+                                    <div className="absolute top-full right-0 mt-2 p-2 bg-slate-800 text-white text-[8px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                                        {!isDbReady ? 'Đang kết nối Cloud...' : syncStatus === 'error' ? 'Lỗi đồng bộ' : syncStatus === 'syncing' ? 'Đang lưu lên đám mây' : 'Đã đồng bộ với máy chủ'}
+                                    </div>
+                                </div>
                                 <div className="flex flex-col items-end">
                                     <span className={`text-[10px] font-black uppercase tracking-widest ${rank.color}`}>{rank.name} {starsInRank === 0 ? 'III' : starsInRank === 1 ? 'II' : 'I'}</span>
                                     <div className="flex gap-1 mt-1">
@@ -840,7 +910,12 @@
                                             </div>
                                             <div className="p-4 md:p-8">
                                                 <div className="space-y-4">
-                                                    {(leaderboard || []).length > 0 ? leaderboard.map((p, i) => {
+                                                    {!isDbReady ? (
+                                                        <div className="text-center py-20 opacity-30 animate-pulse">
+                                                            <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                                                            <p className="font-black uppercase tracking-widest">Đang kết nối Cloud...</p>
+                                                        </div>
+                                                    ) : (leaderboard || []).length > 0 ? leaderboard.map((p, i) => {
                                                         if (!p) return null;
                                                         const pStars = parseInt(p.stars) || 0;
                                                         const pRank = getRankInfo(pStars);
@@ -851,8 +926,11 @@
                                                                     {i + 1}
                                                                 </div>
                                                                 <div className="flex-1">
-                                                                    <h5 className="font-black text-xl dark:text-white">{p.userName || 'Ẩn danh'} {isMe && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2 uppercase italic">Bạn</span>}</h5>
-                                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Lớp: {p.userClass || 'N/A'} • {pRank.name} {pStars % 3 === 0 ? 'III' : pStars % 3 === 1 ? 'II' : 'I'}</p>
+                                                                    <h5 className="font-black text-xl dark:text-white leading-tight">{p.userName || 'Ẩn danh'} {isMe && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full ml-2 uppercase italic">Bạn</span>}</h5>
+                                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                                                        Lớp: {p.userClass || 'N/A'} • {pRank.name} {pStars % 3 === 0 ? 'III' : pStars % 3 === 1 ? 'II' : 'I'}
+                                                                        {p.updatedAt && <span className="ml-2 opacity-50">• {new Date(p.updatedAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
+                                                                    </p>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
                                                                     <span className="text-xl font-black italic text-blue-600">{pStars}</span>
@@ -877,7 +955,7 @@
                                         <div className="flex items-center gap-2"><LucideIcon name="shield-check" className="w-5 h-5" /> CHƯƠNG TRÌNH KNTT</div>
                                         <div className="flex items-center gap-2"><LucideIcon name="zap" className="w-5 h-5" /> HỌC TẬP SIÊU TỐC</div>
                                     </div>
-                                    <p className="text-xs font-bold tracking-widest text-slate-500 dark:text-slate-400">© 2026 HỆ THỐNG LEO RANK TIN HỌC 10. PHÁT TRIỂN BỞI ĐỨC TRUNG VÀ VIỆT HOÀNG.</p>
+                                    <p className="text-xs font-bold tracking-widest text-slate-500 dark:text-slate-400">© 2026 HỆ THỐNG LEO RANK TIN HỌC 10. PHÁT TRIỂN BỞI AI STUDIO.</p>
                                 </footer>
                             </div>
                         </main>
