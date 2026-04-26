@@ -24,112 +24,89 @@ async function startServer() {
         }
 
         const results = [];
-        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'code-exec-'));
 
         try {
+            let judge0LangId = 0;
+
+            if (language === 'python' || language === 'python3') {
+                judge0LangId = 100; // Python 3.12.5
+            } else if (language === 'cpp' || language === 'c++') {
+                judge0LangId = 105; // C++ 14.1.0
+            } else {
+                return res.status(400).json({ error: 'Unsupported language' });
+            }
+
             for (let i = 0; i < testCases.length; i++) {
                 const tc = testCases[i];
-                let execCommand = '';
-                let execArgs = [];
-                let fileName = '';
+                
+                const response = await fetch('https://ce.judge0.com/submissions?base64_encoded=true&wait=true', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        language_id: judge0LangId,
+                        source_code: Buffer.from(code).toString('base64'),
+                        stdin: Buffer.from(tc.input || "").toString('base64'),
+                        cpu_time_limit: 3.0,
+                        memory_limit: 128000
+                    })
+                });
 
-                if (language === 'python' || language === 'python3') {
-                    fileName = path.join(tempDir, 'solution.py');
-                    await fs.writeFile(fileName, code);
-                    execCommand = 'python3';
-                    execArgs = [fileName];
-                } else if (language === 'cpp') {
-                    fileName = path.join(tempDir, 'solution.cpp');
-                    const binaryName = path.join(tempDir, 'solution');
-                    await fs.writeFile(fileName, code);
-                    
-                    // Compile C++
-                    const compile = spawn('g++', [fileName, '-o', binaryName]);
-                    const compileExitCode = await new Promise((resolve) => {
-                        compile.on('close', resolve);
-                    });
-
-                    if (compileExitCode !== 0) {
-                        results.push({
-                            status: 'Compile Error',
-                            actual: '',
-                            expected: tc.output,
-                            error: 'Compilation failed'
-                        });
-                        continue;
-                    }
-                    execCommand = binaryName;
-                    execArgs = [];
-                } else {
-                    return res.status(400).json({ error: 'Unsupported language' });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Judge0 API error: ${response.status} ${response.statusText} - ${text}`);
                 }
 
-                const startTime = process.hrtime();
-                const child = spawn(execCommand, execArgs);
+                const data = await response.json();
 
-                let stdout = '';
-                let stderr = '';
-
-                child.stdin.write(tc.input + '\n');
-                child.stdin.end();
-
-                child.stdout.on('data', (data) => {
-                    stdout += data.toString();
-                });
-
-                child.stderr.on('data', (data) => {
-                    stderr += data.toString();
-                });
-
-                const exitCode = await new Promise((resolve) => {
-                    const timeout = setTimeout(() => {
-                        child.kill();
-                        resolve('timeout');
-                    }, 5000);
-
-                    child.on('close', (code) => {
-                        clearTimeout(timeout);
-                        resolve(code);
+                if (data.status.id === 6) { // Compilation Error
+                    results.push({
+                        status: 'Compile Error',
+                        actual: '',
+                        expected: tc.output,
+                        error: data.compile_output ? Buffer.from(data.compile_output, 'base64').toString('utf8') : 'Compilation failed'
                     });
-                });
+                    continue;
+                }
 
-                const diff = process.hrtime(startTime);
-                const timeInSeconds = (diff[0] + diff[1] / 1e9).toFixed(3);
-
-                if (exitCode === 'timeout') {
+                if (data.status.id === 5) { // Time Limit Exceeded
                     results.push({
                         status: 'TLE',
-                        time: timeInSeconds,
-                        actual: stdout.trim(),
+                        time: data.time || "3.000",
+                        actual: data.stdout ? Buffer.from(data.stdout, 'base64').toString('utf8').trim() : "",
                         expected: tc.output.trim(),
                         error: 'Time Limit Exceeded'
                     });
-                } else {
-                    const actualOutput = stdout.trim();
-                    const expectedOutput = tc.output.trim();
-                    const isCorrect = actualOutput === expectedOutput;
-
-                    results.push({
-                        status: isCorrect ? 'AC' : 'WA',
-                        time: timeInSeconds,
-                        actual: actualOutput,
-                        expected: expectedOutput,
-                        stderr: stderr.trim()
-                    });
+                    continue;
                 }
+                
+                if (data.status.id >= 7 && data.status.id <= 12) { // Runtime Error
+                    results.push({
+                        status: 'Runtime Error',
+                        time: data.time || "0.000",
+                        actual: data.stdout ? Buffer.from(data.stdout, 'base64').toString('utf8').trim() : "",
+                        expected: tc.output.trim(),
+                        error: data.stderr ? Buffer.from(data.stderr, 'base64').toString('utf8') : (data.message ? Buffer.from(data.message, 'base64').toString('utf8') : 'Runtime Error')
+                    });
+                    continue;
+                }
+
+                const actualOutput = data.stdout ? Buffer.from(data.stdout, 'base64').toString('utf8').trim() : "";
+                const expectedOutput = tc.output.trim();
+                const isCorrect = actualOutput === expectedOutput;
+
+                results.push({
+                    status: isCorrect ? 'AC' : 'WA',
+                    time: data.time || "0.100", 
+                    actual: actualOutput,
+                    expected: expectedOutput,
+                    stderr: data.stderr ? Buffer.from(data.stderr, 'base64').toString('utf8').trim() : ""
+                });
             }
 
             res.json({ results });
         } catch (err) {
-            console.error(err);
-            res.status(500).json({ error: 'Internal server error during execution' });
-        } finally {
-            // Cleanup
-            try {
-                await fs.rm(tempDir, { recursive: true, force: true });
-            } catch (e) {
-                console.error('Failed to cleanup temp dir:', e);
-            }
+            console.error('Execution error: ', err);
+            res.status(500).json({ error: 'Internal server error during execution: ' + (err.message || String(err)) });
         }
     });
 
