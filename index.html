@@ -522,66 +522,97 @@
         { id: "ks_gdtx", name: "GDNN-GDTX Kỳ Sơn", region: "Kỳ Sơn" },
       ].sort((a, b) => a.name.localeCompare(b.name, "vi"));
 
-      const RANKS = [
-        {
-          name: "Đồng",
-          color: "rank-bronze",
-          icon: "shield",
-          bgColor: "from-orange-900/40 to-orange-950/60",
-          title: "Tập sự Tin học",
-        },
-        {
-          name: "Bạc",
-          color: "rank-silver",
-          icon: "shield",
-          bgColor: "from-slate-700/40 to-slate-900/60",
-          title: "Thánh Lý Thuyết",
-        },
-        {
-          name: "Vàng",
-          color: "rank-gold",
-          icon: "shield",
-          bgColor: "from-amber-600/40 to-amber-900/60",
-          title: "Siêu Cấp Code",
-        },
-        {
-          name: "Kim cương",
-          color: "rank-diamond",
-          icon: "diamond",
-          bgColor: "from-cyan-600/40 to-cyan-900/60",
-          title: "Cỗ Máy Giải Bài",
-        },
-        {
-          name: "Tinh anh",
-          color: "rank-elite",
-          icon: "zap",
-          bgColor: "from-purple-600/40 to-purple-900/60",
-          title: "Kẻ Huỷ Diệt Tin Học",
-        },
-        {
-          name: "Cao thủ",
-          color: "rank-master",
-          icon: "flame",
-          bgColor: "from-red-600/40 to-red-900/60",
-          title: "Bậc Thầy Giải Thuật",
-        },
-        {
-          name: "Thách đấu",
-          color: "rank-challenger",
-          icon: "crown",
-          bgColor: "from-yellow-500/40 to-yellow-800/60",
-          title: "Thần Tin Nghệ An",
-        },
-      ];
-
       // Safe rank getter
-      const getRankInfo = (stars = 0) => {
-        const safeStars = parseInt(stars) || 0;
-        const tierIdx = Math.floor(Math.max(0, safeStars) / 3);
-        const rank = RANKS[Math.min(tierIdx, RANKS.length - 1)] || RANKS[0];
-        const subTier =
-          safeStars % 3 === 0 ? "III" : safeStars % 3 === 1 ? "II" : "I";
-        return { ...rank, subTier };
+      const getRankInfo = (stars = 0, customTitle = null) => {
+        const s = parseInt(stars) || 0;
+
+        let rankName,
+          color,
+          icon,
+          title,
+          isTopRank = false,
+          tierStars = 0,
+          maxTierStars = 5;
+
+        if (s < 5) {
+          rankName = "Đồng";
+          color = "text-amber-700";
+          icon = "shield";
+          title = "Tập sự Tin học";
+          tierStars = s;
+          maxTierStars = 5;
+        } else if (s < 10) {
+          rankName = "Bạc";
+          color = "text-slate-400";
+          icon = "shield";
+          title = "Thánh Lý Thuyết";
+          tierStars = s - 5;
+          maxTierStars = 5;
+        } else if (s < 15) {
+          rankName = "Vàng";
+          color = "text-yellow-400";
+          icon = "award";
+          title = "Siêu Cấp Code";
+          tierStars = s - 10;
+          maxTierStars = 5;
+        } else if (s < 21) {
+          rankName = "Bạch Kim";
+          color = "text-slate-400 dark:text-slate-300";
+          icon = "star";
+          title = "Chuyên Gia";
+          tierStars = s - 15;
+          maxTierStars = 6;
+        } else if (s < 28) {
+          rankName = "Kim Cương";
+          color = "text-blue-500";
+          icon = "diamond";
+          title = "Cỗ Máy Giải Bài";
+          tierStars = s - 21;
+          maxTierStars = 7;
+        } else if (s < 36) {
+          rankName = "Tinh Anh";
+          color = "text-fuchsia-500";
+          icon = "zap";
+          title = "Kẻ Huỷ Diệt Tin Học";
+          tierStars = s - 28;
+          maxTierStars = 8;
+        } else {
+          isTopRank = true;
+          tierStars = s - 35;
+          maxTierStars = null;
+          if (tierStars < 20) {
+            rankName = "Cao thủ";
+            color = "text-orange-500";
+            icon = "flame";
+            title = "Bậc Thầy Giải Thuật";
+          } else if (tierStars < 50) {
+            rankName = "Chiến tướng";
+            color = "text-purple-600";
+            icon = "swords";
+            title = "Huyền Thoại";
+          } else {
+            rankName = "Chiến thần";
+            color = "text-amber-500";
+            icon = "crown";
+            title = "Thần Tin Nghệ An";
+          }
+        }
+
+        let displayTitle = title;
+        if (isTopRank && customTitle) {
+          displayTitle = customTitle;
+        }
+
+        return {
+          name: rankName,
+          color,
+          icon,
+          title: displayTitle,
+          subTier: `${tierStars} sao`,
+          isTopRank,
+          tierStars,
+          maxTierStars,
+        };
       };
 
       const CHAPTERS_DATA = [
@@ -3326,6 +3357,9 @@
           userStats.schoolId || "",
         );
         const [tempAvatar, setTempAvatar] = useState(userStats.avatar || "");
+        const [tempCustomTitle, setTempCustomTitle] = useState(
+          userStats.customTitle || "",
+        );
         const [leaderboardTab, setLeaderboardTab] = useState("class"); // 'class', 'school', 'province'
         const [showUserInfoCard, setShowUserInfoCard] = useState(false);
         const [showAdminModal, setShowAdminModal] = useState(false);
@@ -3665,6 +3699,7 @@
           const finalName = (tempName || "").trim();
           const finalClass = (tempClass || "").trim().toUpperCase();
           let finalAvatar = (tempAvatar || "").trim();
+          const finalCustomTitle = (tempCustomTitle || "").trim();
           const school = SCHOOL_LIST.find((s) => s.id === tempSchoolId);
 
           if (!finalName || !finalClass || !school) {
@@ -3694,6 +3729,7 @@
               schoolName: school.name,
               userId: uid,
               avatar: finalAvatar,
+              customTitle: finalCustomTitle,
               updatedAt: new Date().toISOString(),
             };
 
@@ -3787,8 +3823,8 @@
           }
         }, [dark]);
 
-        const rank = getRankInfo(userStats.stars);
-        const starsInRank = (parseInt(userStats.stars) || 0) % 3;
+        const rank = getRankInfo(userStats.stars, userStats.customTitle);
+        const starsInRank = rank.tierStars;
 
         const allLessons = CHAPTERS_DATA.flatMap((ch) => ch.lessons);
         const activeLesson =
@@ -3800,8 +3836,8 @@
             const stars = parseInt(userStats.stars) || 0;
             if (!userStats.completedLessons.includes(activeLessonId)) {
               const nextStars = stars + 1;
-              const oldIdx = Math.floor(stars / 3);
-              const newIdx = Math.floor(nextStars / 3);
+              const oldRankName = getRankInfo(stars).name;
+              const newRankName = getRankInfo(nextStars).name;
 
               const nextStats = {
                 ...userStats,
@@ -3815,7 +3851,7 @@
               setUserStats(nextStats);
               syncProgress(nextStats);
 
-              if (newIdx > oldIdx) {
+              if (oldRankName !== newRankName) {
                 // Rank up celebration
                 playSound(SOUNDS.LEVEL_UP);
                 confetti({
@@ -3831,15 +3867,11 @@
                   ],
                 });
 
-                if (newIdx < RANKS.length) {
-                  setTimeout(
-                    () =>
-                      alert(
-                        `CHÚC MỪNG! Bạn đã thăng hạng lên ${RANKS[newIdx].name}!`,
-                      ),
-                    500,
-                  );
-                }
+                setTimeout(
+                  () =>
+                    alert(`CHÚC MỪNG! Bạn đã thăng hạng lên ${newRankName}!`),
+                  500,
+                );
               }
             }
           }
@@ -5569,7 +5601,7 @@
                                     <div className="flex flex-col items-center shrink-0">
                                       <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
                                         <span className="text-xl font-black italic text-blue-600">
-                                          {pStars % 3}
+                                          {pRank.tierStars}
                                         </span>
                                         <LucideIcon
                                           name="star"
@@ -5865,6 +5897,27 @@
                               </div>
                             )}
                           </div>
+
+                          {getRankInfo(userStats.stars).isTopRank && (
+                            <div className="space-y-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                              <label className="text-[10px] font-black text-amber-500 uppercase tracking-[3px] ml-4 flex items-center gap-2">
+                                <LucideIcon name="crown" className="w-4 h-4" />{" "}
+                                BIỆT DANH CAO THỦ (Độc Quyền)
+                              </label>
+                              <input
+                                type="text"
+                                value={tempCustomTitle}
+                                onChange={(e) =>
+                                  setTempCustomTitle(e.target.value)
+                                }
+                                placeholder="Đặt biệt danh (vd: Chiến Thần Code...)"
+                                className="w-full bg-amber-50/50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-900/30 px-6 py-5 rounded-[24px] font-black text-lg text-amber-600 dark:text-amber-400 focus:border-amber-400 outline-none transition-all placeholder:text-amber-200/50 dark:placeholder:text-amber-800/50"
+                              />
+                              <p className="text-[10px] text-slate-400 font-bold ml-4">
+                                Danh hiệu sẽ nổi bật trên Bảng Xếp Hạng
+                              </p>
+                            </div>
+                          )}
                         </div>
 
                         <button
