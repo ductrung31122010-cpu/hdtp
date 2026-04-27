@@ -17,6 +17,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.37.1/mode-python.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.37.1/mode-c_cpp.js"></script>
 
+    <script>
+        window.alert = function(msg) {
+          console.log("ALERT OVERRIDDEN:", msg);
+        };
+    </script>
+
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       import {
@@ -41,6 +47,7 @@
         serverTimestamp,
         increment,
         arrayUnion,
+        limit,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
       // Expose to window for the React app
@@ -63,6 +70,7 @@
         orderBy,
         onSnapshot,
         serverTimestamp,
+        limit,
         increment,
         arrayUnion,
       };
@@ -1743,7 +1751,7 @@
               ).includes(contest.id);
 
               if (!isAlreadyRewarded && correctCount === problems.length) {
-                alert(
+                console.log(
                   `Chúc mừng! Bạn đã hoàn thành kỳ thi và nhận được ${contest.rewardStars} Sao!`,
                 );
                 await fm.setDoc(
@@ -1766,7 +1774,7 @@
               }
             }
           } catch (err) {
-            alert("Lỗi nộp bài: " + (err.message || "Không xác định"));
+            console.log("Lỗi nộp bài: " + (err.message || "Không xác định"));
             console.error(err);
           }
         };
@@ -1820,7 +1828,7 @@
             ).includes(contest.id);
             if (!isAlreadyRewarded && score >= contest.questions.length * 0.8) {
               // 80% to get reward
-              alert(
+              console.log(
                 `Chúc mừng! Bạn đạt ${score}/${contest.questions.length} điểm và nhận được ${contest.rewardStars} Sao!`,
               );
               await fm.setDoc(
@@ -1841,13 +1849,13 @@
                 ],
               }));
             } else {
-              alert(
+              console.log(
                 `Kết quả: ${score}/${contest.questions.length} điểm. Hãy cố gắng hơn ở các kỳ thi sau!`,
               );
             }
             setView("leaderboard");
           } catch (err) {
-            alert("Lỗi nộp bài: " + (err.message || "Không xác định"));
+            console.log("Lỗi nộp bài: " + (err.message || "Không xác định"));
             console.error(err);
           }
         };
@@ -3283,6 +3291,124 @@
 
       // --- MAIN APP ---
 
+      const HonorsPage = ({ isDbReady, db, setCurrentView }) => {
+        const [topUsers, setTopUsers] = useState([]);
+
+        useEffect(() => {
+          if (!isDbReady || !db) {
+            // Mock data if no DB
+            setTopUsers([
+              {
+                userId: "1",
+                userName: "Trung Đức",
+                stars: 55,
+                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=TrungĐức",
+                customTitle: "Chiến Thần",
+              },
+              {
+                userId: "2",
+                userName: "Minh Tuấn",
+                stars: 40,
+                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=MinhTuấn",
+                customTitle: "Cao Thủ",
+              },
+              {
+                userId: "3",
+                userName: "Lan Anh",
+                stars: 30,
+                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=LanAnh",
+                customTitle: null,
+              },
+              {
+                userId: "4",
+                userName: "Hoàng Nam",
+                stars: 25,
+                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=HoàngNam",
+                customTitle: null,
+              },
+              {
+                userId: "5",
+                userName: "Mai Phương",
+                stars: 20,
+                avatar:
+                  "https://api.dicebear.com/7.x/bottts/svg?seed=MaiPhương",
+                customTitle: null,
+              },
+            ]);
+            return;
+          }
+          const fetchTopUsers = async () => {
+            const fm = window.FirebaseModular;
+            const q = fm.query(
+              fm.collection(db, "users"),
+              fm.orderBy("stars", "desc"),
+              fm.limit(5),
+            );
+            const snap = await fm.getDocs(q);
+            setTopUsers(snap.docs.map((d) => ({ userId: d.id, ...d.data() })));
+          };
+          fetchTopUsers();
+        }, [isDbReady, db]);
+
+        const getCrownConfig = (index) => {
+          switch (index) {
+            case 0: return { color: 'text-yellow-400', label: '1', border: 'border-yellow-400' };
+            case 1: return { color: 'text-slate-300', label: '2', border: 'border-slate-300' };
+            case 2: return { color: 'text-amber-700', label: '3', border: 'border-amber-700' };
+            default: return null;
+          }
+        };
+
+        return (
+          <div className="w-full bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black uppercase tracking-widest text-slate-800 dark:text-white flex items-center gap-2">
+                <LucideIcon name="trophy" className="text-amber-500 w-5 h-5" />
+                BẢNG VINH DANH TOP 5
+              </h3>
+              <button 
+                onClick={() => setCurrentView('main')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-700 transition"
+              >
+                VÀO HỌC NGAY →
+              </button>
+            </div>
+            
+            <div className="flex flex-wrap justify-center gap-4">
+              {topUsers.map((user, index) => {
+                const rankInfo = getRankInfo(user.stars, user.customTitle);
+                const crown = getCrownConfig(index);
+                return (
+                  <div key={user.userId} className="flex flex-col items-center gap-1 w-20">
+                    <div className="relative">
+                      {crown && (
+                        <div className={`absolute -top-3 -right-3 flex items-center justify-center ${crown.color} z-10`}>
+                           <LucideIcon name="crown" className="w-6 h-6" />
+                           <span className="absolute text-[9px] font-black text-slate-900 translate-y-0.5">{crown.label}</span>
+                        </div>
+                      )}
+                      
+                      <div className={`p-0.5 rounded-full border-2 ${index === 0 ? 'border-yellow-400' : index === 1 ? 'border-slate-300' : index === 2 ? 'border-amber-700' : 'border-slate-200'} bg-white shadow-sm`}>
+                        <img
+                          src={user.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.userName}`}
+                          alt={user.userName}
+                          className="w-12 h-12 rounded-full object-cover border-2 border-white"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center">
+                       <p className="font-bold text-[10px] dark:text-white truncate w-20">{user.userName}</p>
+                       <p className={`text-[9px] font-black uppercase ${rankInfo.color}`}>{rankInfo.tierStars || 0}★</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      };
+
       const App = () => {
         const [error, setError] = useState(null);
 
@@ -3292,6 +3418,7 @@
         );
         const [activeLessonId, setActiveLessonId] = useState("c1-l1");
         const [tab, setTab] = useState("study");
+        const [currentView, setCurrentView] = useState('honors'); // 'honors', 'main'
         const [mobileMenu, setMobileMenu] = useState(false);
         const [isDbReady, setIsDbReady] = useState(false);
         const [user, setUser] = useState(null);
@@ -3869,7 +3996,7 @@
 
                 setTimeout(
                   () =>
-                    alert(`CHÚC MỪNG! Bạn đã thăng hạng lên ${newRankName}!`),
+                    console.log(`CHÚC MỪNG! Bạn đã thăng hạng lên ${newRankName}!`),
                   500,
                 );
               }
@@ -4282,45 +4409,46 @@
 
               {/* Main Content */}
               <main className="flex-1 overflow-y-auto bg-slate-50/20 p-6 md:p-12 lg:p-20">
-                <div className="max-w-4xl mx-auto space-y-12">
-                  <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white dark:bg-slate-900 px-4 py-2 rounded-full w-fit border border-slate-100 dark:border-slate-800">
-                    <span>NỘI DUNG</span>
-                    <LucideIcon name="chevron-right" className="w-3 h-3" />
-                    <span className="text-blue-500">{activeLesson.title}</span>
-                  </div>
-
-                  <header className="space-y-6">
-                    <h2 className="text-5xl md:text-7xl font-display font-black tracking-tight leading-tight dark:text-white uppercase">
-                      {activeLesson.title}
-                    </h2>
-                    <p className="text-xl text-slate-500 dark:text-slate-400 font-medium">
-                      Ôn tập các kiến thức trọng tâm và thực hành trắc nghiệm để
-                      thăng hạng sao cấp bậc của bạn.
-                    </p>
-                  </header>
-
-                  {/* Tabs */}
-                  <div className="flex flex-col lg:flex-row gap-4 items-center justify-between p-2 bg-white/80 dark:bg-slate-900/80 rounded-3xl sticky top-4 z-40 backdrop-blur-xl shadow-2xl shadow-slate-200/50 border border-slate-100 dark:border-slate-800">
-                    <div className="flex w-full lg:w-auto gap-1">
-                      {[
-                        { id: "study", label: "TỔNG QUAN", icon: "book-open" },
-                        { id: "quiz", label: "LUYỆN RANK", icon: "sword" },
-                        { id: "flash", label: "GHI NHỚ", icon: "zap" },
-                        { id: "leaderboard", label: "BXH", icon: "bar-chart" },
-                        { id: "contests", label: "KỲ THI", icon: "award" },
-                      ].map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setTab(t.id)}
-                          className={`flex-1 flex items-center justify-center gap-2 py-4 px-6 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all
-                                                    ${tab === t.id ? "bg-blue-600 text-white shadow-xl shadow-blue-500/30" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"}
-                                                `}
-                        >
-                          <LucideIcon name={t.icon} className="w-4 h-4" />
-                          <span className="hidden sm:inline">{t.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                {currentView === 'honors' ? (
+                  <HonorsPage isDbReady={isDbReady} db={db} setCurrentView={setCurrentView} />
+                ) : (
+                  <div className="max-w-4xl mx-auto space-y-8">
+                    {/* Compact Header & Tabs */}
+                    {activeLesson && (
+                      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-white/80 dark:bg-slate-900/80 rounded-3xl sticky top-4 z-40 backdrop-blur-xl shadow-lg border border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700">
+                            <span>NỘI DUNG</span>
+                            <LucideIcon name="chevron-right" className="w-3 h-3" />
+                            <span className="text-blue-500">{activeLesson?.title || "..."}</span>
+                          </div>
+                          <h2 className="text-xl font-display font-black tracking-tight leading-tight dark:text-white uppercase">
+                            {activeLesson?.title || "..."}
+                          </h2>
+                        </div>
+                        
+                        <div className="flex w-full lg:w-auto gap-1">
+                          {[
+                            { id: "study", label: "TỔNG QUAN", icon: "book-open" },
+                            { id: "quiz", label: "LUYỆN RANK", icon: "sword" },
+                            { id: "flash", label: "GHI NHỚ", icon: "zap" },
+                            { id: "leaderboard", label: "BXH", icon: "bar-chart" },
+                            { id: "contests", label: "KỲ THI", icon: "award" },
+                          ].map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => setTab(t.id)}
+                              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all
+                                ${tab === t.id ? "bg-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"}
+                              `}
+                            >
+                              <LucideIcon name={t.icon} className="w-3 h-3" />
+                              <span className="hidden sm:inline">{t.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </header>
+                    )}
 
                     {isAdmin && (
                       <div className="flex gap-2 p-1">
@@ -5102,7 +5230,7 @@
                           Kiến thức trọng tâm
                         </h3>
                         <div className="grid gap-8">
-                          {activeLesson.summary.map((point, i) => (
+                          {activeLesson?.summary?.map((point, i) => (
                             <div
                               key={i}
                               className="flex gap-6 items-start group/item"
@@ -5260,7 +5388,7 @@
                         </div>
                       ))}
 
-                    {tab === "quiz" && (
+                    {tab === "quiz" && activeLesson && (
                       <Quiz
                         lesson={activeLesson}
                         onComplete={handleQuizComplete}
@@ -5460,7 +5588,7 @@
 
                     {tab === "flash" && (
                       <div className="grid md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {activeLesson.flashcards.map((card, i) => (
+                        {activeLesson?.flashcards?.map((card, i) => (
                           <Flashcard key={i} card={card} />
                         ))}
                       </div>
@@ -5649,6 +5777,7 @@
                     </p>
                   </footer>
                 </div>
+                )}
               </main>
             </div>
 
