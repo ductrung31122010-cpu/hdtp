@@ -2341,7 +2341,13 @@
                 {problem.title}
               </h4>
               <div className="flex-1">
-                {renderMarkdown(problem.description)}
+                {problem.descriptionType === "image" ? (
+                  <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 mx-auto max-w-full">
+                    <img src={problem.descriptionImage || problem.description} alt={problem.title} className="w-full h-auto" />
+                  </div>
+                ) : (
+                  renderMarkdown(problem.description)
+                )}
               </div>
 
               <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
@@ -3517,6 +3523,8 @@
           chapterId: "",
           title: "",
           description: "",
+          descriptionType: "text", // 'text' | 'image'
+          descriptionImage: "", // base64 or URL
           difficulty: "easy",
           sampleInput: "",
           sampleOutput: "",
@@ -5433,18 +5441,73 @@
                             </div>
                           </div>
 
-                          <div className="space-y-2">
-                            <textarea
-                              value={adminForm.description}
-                              onChange={(e) =>
-                                setAdminForm({
-                                  ...adminForm,
-                                  description: e.target.value,
-                                })
-                              }
-                              className="w-full h-48 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-medium dark:text-white resize-none"
-                              placeholder="Sử dụng ### cho tiêu đề con, - cho danh sách..."
-                            />
+                          <div className="space-y-4">
+                            <div className="flex gap-4 items-center">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                Nội dung bài tập
+                              </label>
+                              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setAdminForm({...adminForm, descriptionType: "text"})}
+                                  className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${adminForm.descriptionType === "text" ? "bg-white dark:bg-slate-700 text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+                                >
+                                  VĂN BẢN
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAdminForm({...adminForm, descriptionType: "image"})}
+                                  className={`px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${adminForm.descriptionType === "image" ? "bg-white dark:bg-slate-700 text-blue-600 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}
+                                >
+                                  HÌNH ẢNH
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {adminForm.descriptionType === "text" ? (
+                              <textarea
+                                value={adminForm.description}
+                                onChange={(e) =>
+                                  setAdminForm({
+                                    ...adminForm,
+                                    description: e.target.value,
+                                  })
+                                }
+                                className="w-full h-48 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-medium dark:text-white resize-none focus:border-blue-500 focus:outline-none"
+                                placeholder="Nhập nội dung bài tập ở đây (Sử dụng Markdown nếu cần)..."
+                              />
+                            ) : (
+                              <div className="bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-6 rounded-2xl">
+                                <input
+                                  type="text"
+                                  value={adminForm.descriptionImage}
+                                  onChange={(e) => setAdminForm({...adminForm, descriptionImage: e.target.value})}
+                                  placeholder="Nhập đường dẫn (URL) hình ảnh..."
+                                  className="w-full mb-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-4 rounded-xl dark:text-white text-sm focus:border-blue-500 focus:outline-none"
+                                />
+                                <div className="text-center text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">HOẶC CHỌN ẢNH TỪ MÁY</div>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                      const file = e.target.files[0];
+                                      if (file) {
+                                          const reader = new FileReader();
+                                          reader.onloadend = () => {
+                                              setAdminForm({...adminForm, descriptionImage: reader.result});
+                                          };
+                                          reader.readAsDataURL(file);
+                                      }
+                                  }}
+                                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+                                />
+                                {adminForm.descriptionImage && (
+                                    <div className="mt-4 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden aspect-video bg-white dark:bg-slate-900">
+                                        <img src={adminForm.descriptionImage} alt="Preview" className="w-full h-full object-contain" />
+                                    </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="space-y-4">
