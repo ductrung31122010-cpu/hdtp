@@ -3485,9 +3485,36 @@
         const [showUserInfoCard, setShowUserInfoCard] = useState(false);
         const [showAdminModal, setShowAdminModal] = useState(false);
         const [showContestModal, setShowContestModal] = useState(false);
+        
+        // --- ADD LESSON MODAL STATES ---
+        const [showAddLessonModal, setShowAddLessonModal] = useState(false);
+        const [customLessonsData, setCustomLessonsData] = useState([]);
+        const [addLessonForm, setAddLessonForm] = useState({
+          chapterId: "ch1",
+          title: "",
+          summary: [""],
+          flashcards: [{ f: "", b: "" }],
+          questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }]
+        });
+
+        const combinedChapters = useMemo(() => {
+          return CHAPTERS_DATA.map(ch => {
+            const extra = customLessonsData.filter(l => l.chapterId === ch.id);
+            return {
+              ...ch,
+              lessons: [...ch.lessons, ...extra]
+            };
+          });
+        }, [customLessonsData]);
+        // --------------------------------
+
         const [codingSubTab, setCodingSubTab] = useState("practice"); // 'practice', 'contest'
         const [allCodingProblems, setAllCodingProblems] = useState([]);
+        const [codingChapters, setCodingChapters] = useState([]);
+        const [showCodingChapterModal, setShowCodingChapterModal] = useState(false);
+        const [codingChapterTitle, setCodingChapterTitle] = useState("");
         const [adminForm, setAdminForm] = useState({
+          chapterId: "",
           title: "",
           description: "",
           difficulty: "easy",
@@ -3519,22 +3546,57 @@
           ],
         });
 
-        // Fetch Problems for Contest Creation
+        // Fetch custom lessons
+        useEffect(() => {
+          if (!isDbReady || !db) return;
+          const fetchCustomLessons = async () => {
+            const fm = window.FirebaseModular;
+            try {
+              const q = fm.query(
+                fm.collection(db, "custom_lessons"),
+                fm.orderBy("createdAt", "asc")
+              );
+              const snap = await fm.getDocs(q);
+              setCustomLessonsData(
+                snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+              );
+            } catch (err) {
+              const authInfo = auth.currentUser || {};
+              const errInfo = {
+                error: err.message,
+                operationType: "list",
+                path: "custom_lessons",
+                authInfo: {
+                  userId: authInfo.uid,
+                  email: authInfo.email,
+                  isAnonymous: authInfo.isAnonymous
+                }
+              };
+              console.error('Firestore Error: ', JSON.stringify(errInfo));
+              alert("Lỗi tải bài học: Không đủ quyền. Hãy tải lại trang (chờ 1-2 phút để hệ thống cập nhật).");
+            }
+          };
+          fetchCustomLessons();
+        }, [isDbReady, showAddLessonModal]);
+
+// Fetch Problems for Contest Creation
         useEffect(() => {
           if (!isDbReady || !db) return;
           const fetchAllProblems = async () => {
             const fm = window.FirebaseModular;
-            const q = fm.query(
-              fm.collection(db, "coding_problems"),
-              fm.orderBy("createdAt", "desc"),
-            );
-            const snap = await fm.getDocs(q);
-            setAllCodingProblems(
-              snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-            );
+            try {
+              const [probSnap, chapSnap] = await Promise.all([
+                fm.getDocs(fm.query(fm.collection(db, "coding_problems"), fm.orderBy("createdAt", "desc"))),
+                fm.getDocs(fm.query(fm.collection(db, "coding_chapters"), fm.orderBy("createdAt", "asc")))
+              ]);
+              setAllCodingProblems(probSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+              setCodingChapters(chapSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            } catch (err) {
+              console.error("Error fetching coding data:", err);
+            }
           };
           fetchAllProblems();
-        }, [showContestModal, isDbReady, codingSubTab, tab]);
+        }, [showContestModal, showAdminModal, showCodingChapterModal, isDbReady, codingSubTab, tab]);
 
         const [activeContests, setActiveContests] = useState([]);
         const [selectedContest, setSelectedContest] = useState(null);
@@ -3947,7 +4009,7 @@
         const rank = getRankInfo(userStats.stars, userStats.customTitle);
         const starsInRank = rank.tierStars;
 
-        const allLessons = CHAPTERS_DATA.flatMap((ch) => ch.lessons);
+        const allLessons = combinedChapters.flatMap((ch) => ch.lessons);
         const activeLesson =
           allLessons.find((l) => l.id === activeLessonId) || allLessons[0];
 
@@ -4277,7 +4339,15 @@
                           </button>
                         ))}
                       </div>
-                      {CHAPTERS_DATA.map((ch) => (
+                      {isAdmin && (
+                        <button
+                          onClick={() => setShowAddLessonModal(true)}
+                          className="mb-4 w-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex justify-center items-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors border border-dashed border-blue-300 dark:border-blue-700"
+                        >
+                          <LucideIcon name="plus" className="w-4 h-4" /> THÊM BÀI HỌC
+                        </button>
+                      )}
+                      {combinedChapters.map((ch) => (
                         <SidebarChapter
                           key={ch.id}
                           chapter={ch}
@@ -4390,7 +4460,15 @@
                   ))}
                 </div>
 
-                {CHAPTERS_DATA.map((ch) => (
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowAddLessonModal(true)}
+                    className="mb-4 w-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex justify-center items-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors border border-dashed border-blue-300 dark:border-blue-700"
+                  >
+                    <LucideIcon name="plus" className="w-4 h-4" /> THÊM BÀI HỌC
+                  </button>
+                )}
+                {combinedChapters.map((ch) => (
                   <SidebarChapter
                     key={ch.id}
                     chapter={ch}
@@ -5014,6 +5092,223 @@
                     </div>
                   )}
 
+                  {/* Add Lesson Modal */}
+                  {showAddLessonModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
+                      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[40px] shadow-2xl p-8 md:p-12 overflow-y-auto max-h-[90vh] border border-emerald-500/20">
+                        <div className="flex justify-between items-center mb-8">
+                          <h3 className="text-3xl font-black uppercase italic dark:text-white">
+                            Thêm bài học mới
+                          </h3>
+                          <button
+                            onClick={() => setShowAddLessonModal(false)}
+                            className="text-slate-400 hover:text-red-500 transition-colors"
+                          >
+                            <LucideIcon name="x" className="w-8 h-8" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-6">
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tiêu đề bài học</label>
+                              <input
+                                  type="text"
+                                  value={addLessonForm.title}
+                                  onChange={(e) => setAddLessonForm({...addLessonForm, title: e.target.value})}
+                                  placeholder="Ví dụ: Bài 3: ABC..."
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                              />
+                            </div>
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chương</label>
+                              <select
+                                  value={addLessonForm.chapterId}
+                                  onChange={(e) => setAddLessonForm({...addLessonForm, chapterId: e.target.value})}
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                              >
+                                {CHAPTERS_DATA.map(ch => (
+                                    <option key={ch.id} value={ch.id}>{ch.title}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kiến thức trọng tâm (Nhiều dòng, mỗi dòng một ý)</label>
+                              <textarea
+                                value={addLessonForm.summary.join("\n")}
+                                onChange={(e) => setAddLessonForm({...addLessonForm, summary: e.target.value.split("\n")})}
+                                className="w-full h-32 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-medium dark:text-white resize-none"
+                                placeholder="Ý chính 1...&#10;Ý chính 2..."
+                              ></textarea>
+                            </div>
+                            
+                            <div className="space-y-4">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ghi nhớ (Flashcards)</label>
+                                <button type="button" onClick={() => setAddLessonForm({...addLessonForm, flashcards: [...addLessonForm.flashcards, {f: "", b: ""}]})} className="text-emerald-500 font-black text-xs px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded">THÊM</button>
+                              </div>
+                              {addLessonForm.flashcards.map((card, idx) => (
+                                  <div key={idx} className="flex gap-4 items-center">
+                                      <input type="text" value={card.f} onChange={(e) => {
+                                          const nf = [...addLessonForm.flashcards];
+                                          nf[idx].f = e.target.value;
+                                          setAddLessonForm({...addLessonForm, flashcards: nf});
+                                      }} placeholder="Mặt trước (chữ to)" className="flex-1 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl dark:text-white" />
+                                      <input type="text" value={card.b} onChange={(e) => {
+                                          const nf = [...addLessonForm.flashcards];
+                                          nf[idx].b = e.target.value;
+                                          setAddLessonForm({...addLessonForm, flashcards: nf});
+                                      }} placeholder="Mặt sau (giải nghĩa)" className="flex-1 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-3 rounded-xl dark:text-white" />
+                                      <button type="button" onClick={() => {
+                                          const nf = [...addLessonForm.flashcards];
+                                          nf.splice(idx, 1);
+                                          setAddLessonForm({...addLessonForm, flashcards: nf});
+                                      }} className="text-red-500 hover:text-red-600"><LucideIcon name="trash" className="w-5 h-5"/></button>
+                                  </div>
+                              ))}
+                            </div>
+
+                            <div className="space-y-4">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Câu hỏi trắc nghiệm</label>
+                                <button type="button" onClick={() => setAddLessonForm({...addLessonForm, questionPool: [...addLessonForm.questionPool, {question: "", options: ["","","",""], correct: 0, expl: ""}]})} className="text-emerald-500 font-black text-xs px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded">THÊM CÂU HỎI</button>
+                              </div>
+                              {addLessonForm.questionPool.map((q, qIdx) => (
+                                  <div key={qIdx} className="bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl space-y-3 relative">
+                                      <button type="button" onClick={() => {
+                                          const nq = [...addLessonForm.questionPool];
+                                          nq.splice(qIdx, 1);
+                                          setAddLessonForm({...addLessonForm, questionPool: nq});
+                                      }} className="absolute top-4 right-4 text-red-500 hover:text-red-600"><LucideIcon name="trash" className="w-5 h-5"/></button>
+                                      
+                                      <input type="text" value={q.question} onChange={e => {
+                                          const nq = [...addLessonForm.questionPool];
+                                          nq[qIdx].question = e.target.value;
+                                          setAddLessonForm({...addLessonForm, questionPool: nq});
+                                      }} placeholder={`Câu hỏi ${qIdx + 1}`} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl dark:text-white font-bold pr-12" />
+                                      <div className="grid grid-cols-2 gap-3">
+                                          {q.options.map((opt, oIdx) => (
+                                              <div key={oIdx} className="flex gap-2 items-center">
+                                                  <input type="radio" checked={q.correct === oIdx} onChange={() => {
+                                                      const nq = [...addLessonForm.questionPool];
+                                                      nq[qIdx].correct = oIdx;
+                                                      setAddLessonForm({...addLessonForm, questionPool: nq});
+                                                  }} className="w-4 h-4 text-blue-600" />
+                                                  <input type="text" value={opt} onChange={e => {
+                                                      const nq = [...addLessonForm.questionPool];
+                                                      nq[qIdx].options[oIdx] = e.target.value;
+                                                      setAddLessonForm({...addLessonForm, questionPool: nq});
+                                                  }} placeholder={`Tùy chọn ${oIdx + 1}`} className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2 text-sm rounded-lg dark:text-white" />
+                                              </div>
+                                          ))}
+                                      </div>
+                                      <input type="text" value={q.expl} onChange={e => {
+                                          const nq = [...addLessonForm.questionPool];
+                                          nq[qIdx].expl = e.target.value;
+                                          setAddLessonForm({...addLessonForm, questionPool: nq});
+                                      }} placeholder="Giải thích đáp án (sẽ hiển thị khi trả lời)" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 rounded-xl text-sm dark:text-white italic" />
+                                  </div>
+                              ))}
+                            </div>
+                            
+                            <button
+                              onClick={async () => {
+                                if (!addLessonForm.title) {
+                                    alert("Vui lòng nhập tên bài học");
+                                    return;
+                                }
+                                try {
+                                  const fm = window.FirebaseModular;
+                                  await fm.addDoc(fm.collection(db, "custom_lessons"), {
+                                    ...addLessonForm,
+                                    summary: addLessonForm.summary.filter(s => s.trim() !== ""),
+                                    createdAt: fm.serverTimestamp()
+                                  });
+                                  alert("Thêm bài học thành công!");
+                                  const customLessonsRef = fm.query(
+                                    fm.collection(db, "custom_lessons"),
+                                    fm.orderBy("createdAt", "asc")
+                                  );
+                                  const snap = await fm.getDocs(customLessonsRef);
+                                  setCustomLessonsData(
+                                    snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+                                  );
+                                  setShowAddLessonModal(false);
+                                  setAddLessonForm({
+                                    chapterId: "ch1",
+                                    title: "",
+                                    summary: [""],
+                                    flashcards: [{ f: "", b: "" }],
+                                    questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }]
+                                  });
+                                } catch (err) {
+                                  alert("Lỗi: " + err.message);
+                                }
+                              }}
+                              className="w-full bg-emerald-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-emerald-500/30 hover:scale-[1.02] active:scale-95 transition-all"
+                            >
+                              LƯU BÀI HỌC
+                            </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Coding Chapter Modal */}
+                  {showCodingChapterModal && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
+                      <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[40px] shadow-2xl p-8 overflow-y-auto border border-emerald-500/20">
+                        <div className="flex justify-between items-center mb-8">
+                          <h3 className="text-2xl font-black uppercase italic dark:text-white">
+                            Thêm chương bài tập
+                          </h3>
+                          <button
+                            onClick={() => setShowCodingChapterModal(false)}
+                            className="text-slate-400 hover:text-red-500"
+                          >
+                            <LucideIcon name="x" className="w-8 h-8" />
+                          </button>
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                            Tên chương
+                          </label>
+                          <input
+                            type="text"
+                            value={codingChapterTitle}
+                            onChange={(e) => setCodingChapterTitle(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                            placeholder="Ví dụ: Lập trình C++ Cơ bản, Mảng..."
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!codingChapterTitle.trim()) {
+                                alert("Vui lòng nhập tên chương");
+                                return;
+                              }
+                              try {
+                                const fm = window.FirebaseModular;
+                                await fm.addDoc(fm.collection(db, "coding_chapters"), {
+                                  title: codingChapterTitle,
+                                  createdAt: fm.serverTimestamp()
+                                });
+                                setCodingChapterTitle("");
+                                setShowCodingChapterModal(false);
+                                // Fetch again to update state
+                                const snap = await fm.getDocs(fm.query(fm.collection(db, "coding_chapters"), fm.orderBy("createdAt", "asc")));
+                                setCodingChapters(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                                alert("Thêm chương thành công!");
+                              } catch (err) {
+                                alert("Lỗi: " + err.message);
+                              }
+                            }}
+                            className="w-full bg-emerald-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-emerald-500/30 hover:scale-[1.02] active:scale-95 transition-all mt-4"
+                          >
+                            LƯU CHƯƠNG
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Admin Modal */}
                   {showAdminModal && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
@@ -5031,8 +5326,32 @@
                         </div>
 
                         <div className="space-y-8">
-                          <div className="grid md:grid-cols-3 gap-8">
-                            <div className="space-y-2">
+                          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                            <div className="space-y-2 lg:col-span-1 border-r border-slate-100 pr-4">
+                              <div className="flex justify-between items-center mb-1 ml-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Chương
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCodingChapterModal(true)}
+                                  className="text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:text-emerald-600"
+                                >
+                                  + Thêm
+                                </button>
+                              </div>
+                              <select
+                                value={adminForm.chapterId}
+                                onChange={(e) => setAdminForm({...adminForm, chapterId: e.target.value})}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                              >
+                                <option value="">Không có chương</option>
+                                {codingChapters.map(ch => (
+                                    <option key={ch.id} value={ch.id}>{ch.title}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-2 lg:col-span-1">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                 Tiêu đề bài tập
                               </label>
@@ -5049,7 +5368,7 @@
                                 placeholder="Tên bài..."
                               />
                             </div>
-                            <div className="space-y-2">
+                            <div className="space-y-2 lg:col-span-1">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                 Input mẫu
                               </label>
@@ -5428,54 +5747,88 @@
                           </div>
 
                           {codingSubTab === "practice" ? (
-                            <div className="space-y-8">
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {allCodingProblems.map((p, idx) => (
-                                  <div
-                                    key={p.id}
-                                    className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative group hover:scale-[1.02] transition-all"
-                                  >
-                                    <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:rotate-12 transition-transform italic font-black">
-                                      {idx + 1}
-                                    </div>
-                                    <h4 className="text-xl font-black mb-1 uppercase italic tracking-tighter dark:text-white line-clamp-1">
-                                      {p.title}
-                                    </h4>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
-                                      Đã thêm bởi: {p.createdBy || "Hệ thống"}
-                                    </p>
+                            <div className="space-y-12">
+                              {[{ id: "", title: "Cơ bản / Chưa phân loại" }, ...codingChapters].map((ch) => {
+                                const chapterProblems = allCodingProblems.filter(p => (p.chapterId || "") === ch.id);
+                                if (chapterProblems.length === 0) return null;
+                                return (
+                                  <div key={ch.id} className="space-y-6">
+                                    <h3 className="text-2xl font-black uppercase italic dark:text-white border-b-2 border-slate-100 dark:border-slate-800 pb-2">
+                                      {ch.title}
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                      {chapterProblems.map((p, idx) => (
+                                        <div
+                                          key={p.id}
+                                          className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative group hover:scale-[1.02] transition-all"
+                                        >
+                                          <div className="flex justify-between items-start mb-6">
+                                            <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 group-hover:rotate-12 transition-transform italic font-black">
+                                              {idx + 1}
+                                            </div>
+                                            {isAdmin && (
+                                              <button
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  if (window.confirm("Bạn có chắc chắn muốn xóa bài tập này?")) {
+                                                    try {
+                                                      const fm = window.FirebaseModular;
+                                                      await fm.deleteDoc(fm.doc(db, "coding_problems", p.id));
+                                                      setAllCodingProblems(allCodingProblems.filter(prob => prob.id !== p.id));
+                                                      alert("Đã xóa bài tập!");
+                                                    } catch (err) {
+                                                      alert("Lỗi: " + err.message);
+                                                    }
+                                                  }
+                                                }}
+                                                className="text-slate-300 hover:text-red-500 transition-colors p-2"
+                                                title="Xóa bài tập"
+                                              >
+                                                <LucideIcon name="trash" className="w-5 h-5" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <h4 className="text-xl font-black mb-1 uppercase italic tracking-tighter dark:text-white line-clamp-1">
+                                            {p.title}
+                                          </h4>
+                                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+                                            Đã thêm bởi: {p.createdBy || "Hệ thống"}
+                                          </p>
 
-                                    <button
-                                      onClick={() =>
-                                        setSelectedContest({
-                                          id: "practice_view",
-                                          title: "Tự luyện bài tập",
-                                          type: "coding",
-                                          durationMinutes: 120,
-                                          problemIds: [p.id],
-                                          rewardStars: 0,
-                                        })
-                                      }
-                                      className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-500/20"
-                                    >
-                                      Bắt đầu làm bài
-                                    </button>
-                                  </div>
-                                ))}
-                                {allCodingProblems.length === 0 && (
-                                  <div className="col-span-full py-20 text-center space-y-4">
-                                    <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-300">
-                                      <LucideIcon
-                                        name="file-question"
-                                        className="w-10 h-10"
-                                      />
+                                          <button
+                                            onClick={() =>
+                                              setSelectedContest({
+                                                id: "practice_view",
+                                                title: "Tự luyện bài tập",
+                                                type: "coding",
+                                                durationMinutes: 120,
+                                                problemIds: [p.id],
+                                                rewardStars: 0,
+                                              })
+                                            }
+                                            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-transform"
+                                          >
+                                            Bắt đầu làm bài
+                                          </button>
+                                        </div>
+                                      ))}
                                     </div>
-                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                                      Chưa có bài tập nào được thêm
-                                    </p>
                                   </div>
-                                )}
-                              </div>
+                                );
+                              })}
+                              {allCodingProblems.length === 0 && (
+                                <div className="col-span-full py-20 text-center space-y-4">
+                                  <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-300">
+                                    <LucideIcon
+                                      name="file-question"
+                                      className="w-10 h-10"
+                                    />
+                                  </div>
+                                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                    Chưa có bài tập nào được thêm
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

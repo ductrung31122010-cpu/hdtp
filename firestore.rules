@@ -59,9 +59,19 @@ service cloud.firestore {
       allow update: if true;
     }
 
+    match /coding_chapters/{chapterId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /coding_problems/{problemId} {
       allow read: if true;
       allow write: if true; // In production, restrict to admin
+    }
+
+    match /custom_lessons/{lessonId} {
+      allow read: if true;
+      allow write: if true;
     }
 
     match /contests/{contestId} {
