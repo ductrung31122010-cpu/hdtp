@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.js",
+    "start": "node server.js",
     "build": "echo 'No build needed' && mkdir -p dist && cp index.html dist/index.html",
     "preview": "vite preview",
     "clean": "rm -rf dist",
