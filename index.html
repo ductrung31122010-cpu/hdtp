@@ -1334,7 +1334,7 @@
             setShowResult(false);
           } else {
             setFinished(true);
-            onComplete(score);
+            onComplete(score, questions.length);
           }
         };
 
@@ -1412,26 +1412,50 @@
 
         const q = questions[current];
         const totalQ = questions.length;
+        
+        const getFireColors = (s) => {
+          if (s >= 20) return "text-purple-600 fill-purple-600 drop-shadow-[0_0_30px_rgba(147,51,234,0.6)]";
+          if (s >= 15) return "text-rose-600 fill-rose-600 drop-shadow-[0_0_25px_rgba(225,29,72,0.6)]";
+          if (s >= 10) return "text-red-600 fill-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.6)]";
+          if (s >= 5) return "text-orange-600 fill-orange-600 drop-shadow-[0_0_15px_rgba(234,88,12,0.6)]";
+          return "text-yellow-500 fill-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]";
+        };
+
         return (
           <div
             className={`relative bg-white dark:bg-slate-800 p-6 md:p-10 rounded-3xl shadow-xl border-2 transition-all duration-300 ${streak >= 5 ? "streak-fire" : "border-slate-100 dark:border-slate-700"}`}
           >
-            {/* Streak Animation Overlay */}
-            {showStreakAnim && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none animate-in zoom-in fade-in duration-300">
-                <div className="text-center">
+            {/* Background Streak Flame */}
+            {streak >= 2 && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-30 dark:opacity-40 z-0 overflow-hidden">
+                <div className="relative flex items-center justify-center mt-12 animate-in zoom-in fade-in duration-500">
                   <LucideIcon
                     name="flame"
-                    className="w-32 h-32 text-orange-600 fill-orange-600 mx-auto animate-bounce"
+                    className={`w-64 h-64 ${getFireColors(streak)}`}
                   />
-                  <h2 className="text-6xl font-black text-white italic drop-shadow-2xl uppercase mt-4">
-                    CHUỖI {streak} 🔥
-                  </h2>
+                  <span className="absolute text-[80px] font-black text-slate-900 pt-16 z-10 font-display">
+                    {streak}
+                  </span>
                 </div>
               </div>
             )}
 
-            <div className="flex justify-between items-center mb-8">
+            {/* Streak Animation Overlay - keeping it for big bumps but styling it similarly */}
+            {showStreakAnim && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none animate-in zoom-in fade-in duration-300">
+                <div className="relative flex items-center justify-center">
+                  <LucideIcon
+                    name="flame"
+                    className={`w-80 h-80 animate-bounce ${getFireColors(streak)}`}
+                  />
+                  <span className="absolute text-[100px] font-black text-slate-900 pt-20 animate-bounce font-display">
+                    {streak}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mb-8 relative z-10">
               <div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
                   KIỂM TRA TIẾN ĐỘ
@@ -1440,14 +1464,14 @@
                   <span className="text-sm font-bold text-blue-600">
                     Câu {current + 1} / {totalQ}
                   </span>
-                  {streak >= 5 && (
-                    <div className="flex items-center gap-1 bg-orange-100 dark:bg-orange-600/20 px-2 py-0.5 rounded-full animate-bounce">
+                  {streak >= 2 && (
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full">
                       <LucideIcon
                         name="flame"
-                        className="w-3 h-3 text-orange-600 fill-orange-600"
+                        className={`w-4 h-4 ${getFireColors(streak).split(" ")[0]} ${getFireColors(streak).split(" ")[1]}`}
                       />
-                      <span className="text-[9px] font-black text-orange-600 uppercase">
-                        {streak} CHUỖI
+                      <span className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                        {streak}
                       </span>
                     </div>
                   )}
@@ -1460,10 +1484,10 @@
                 ></div>
               </div>
             </div>
-            <h4 className="text-xl font-bold mb-8 leading-tight dark:text-slate-100">
+            <h4 className="text-xl font-bold mb-8 leading-tight dark:text-slate-100 relative z-10">
               {q.question}
             </h4>
-            <div className="space-y-3">
+            <div className="space-y-3 relative z-10">
               {q.options.map((opt, i) => (
                 <button
                   key={i}
@@ -3484,6 +3508,7 @@
           userStats.schoolId || "",
         );
         const [tempAvatar, setTempAvatar] = useState(userStats.avatar || "");
+        const [tempRole, setTempRole] = useState(userStats.role || "");
         const [tempCustomTitle, setTempCustomTitle] = useState(
           userStats.customTitle || "",
         );
@@ -3502,6 +3527,85 @@
           flashcards: [{ f: "", b: "" }],
           questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }]
         });
+
+        const [bulkText, setBulkText] = useState("");
+        const [showBulkInput, setShowBulkInput] = useState(false);
+
+        const parseBulkContent = () => {
+          if (!bulkText.trim()) return;
+          const blocks = bulkText.split(/(?=(?:Câu|Bài)\s*\d+[\.\:]|(?:\n|^)\d+[\.\:])/i).filter(b => b.trim());
+          let newQuestions = [];
+
+          blocks.forEach(block => {
+            let lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length === 0) return;
+
+            // Câu hỏi
+            let qText = lines[0].replace(/^(?:Câu|Bài)\s*\d+[\.\:]?\s*/i, '').replace(/^\d+[\.\:]\s*/, '').trim();
+            
+            let optionsText = lines.slice(1).join(' ');
+            let options = [];
+            let correct = 0;
+
+            const optRegex = /([A-D][\.\)].+?)(?=[A-D][\.\)]|$)/gi;
+            let match;
+            while ((match = optRegex.exec(optionsText)) !== null) {
+              let opt = match[1];
+              let isCorrect = opt.includes('*');
+              opt = opt.replace(/^[A-D][\.\)]\s*/i, '').replace(/\*/g, '').trim();
+              if (options.length < 4) {
+                 if (isCorrect) correct = options.length;
+                 options.push(opt);
+              }
+            }
+
+            // Fallback nếu không có A. B. C. D.
+            if (options.length === 0) {
+               lines.slice(1).forEach(l => {
+                   let isCorrect = l.includes('*');
+                   let opt = l.replace(/^[A-D][\.\)]\s*/i, '').replace(/\*/g, '').trim();
+                   if (options.length < 4) {
+                       if (isCorrect) correct = options.length;
+                       options.push(opt);
+                   }
+               });
+            }
+
+            while (options.length < 4) options.push("");
+            
+            if (qText) {
+                newQuestions.push({
+                   question: qText,
+                   options,
+                   correct,
+                   expl: ""
+                });
+            }
+          });
+
+          if (newQuestions.length > 0) {
+              setAddLessonForm(prev => ({
+                  ...prev,
+                  questionPool: [...prev.questionPool, ...newQuestions]
+              }));
+              setShowBulkInput(false);
+              setBulkText("");
+          } else {
+              alert("Không nhận diện được câu hỏi. Hãy đảm bảo bắt đầu bằng 'Câu X:' và đáp án A. B. C. D.");
+          }
+        };
+
+        const handleKeyDown = (e, qIdx) => {
+            if (e.altKey && ['1','2','3','4'].includes(e.key)) {
+                e.preventDefault();
+                const optionIndex = parseInt(e.key) - 1;
+                const nq = [...addLessonForm.questionPool];
+                if (optionIndex < nq[qIdx].options.length) {
+                    nq[qIdx] = { ...nq[qIdx], correct: optionIndex };
+                    setAddLessonForm({...addLessonForm, questionPool: nq});
+                }
+            }
+        };
 
         const combinedChapters = useMemo(() => {
           return CHAPTERS_DATA.map(ch => {
@@ -3529,6 +3633,7 @@
           sampleInput: "",
           sampleOutput: "",
           testCases: [{ input: "", output: "" }],
+          targetClasses: ["global"], // "global" or ["10A1", "10A2"]
         });
         const [contestForm, setContestForm] = useState({
           title: "",
@@ -3539,6 +3644,7 @@
           durationMinutes: 45,
           problemIds: [],
           questions: [], // For general quiz
+          targetClasses: ["global"],
         });
 
         const [quizEditor, setQuizEditor] = useState({
@@ -3597,14 +3703,25 @@
                 fm.getDocs(fm.query(fm.collection(db, "coding_problems"), fm.orderBy("createdAt", "desc"))),
                 fm.getDocs(fm.query(fm.collection(db, "coding_chapters"), fm.orderBy("createdAt", "asc")))
               ]);
-              setAllCodingProblems(probSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+              const rawProblems = probSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              // Filter logic stringently based on constraints
+              const canViewAll = isAdmin || (userStats.role === "teacher" && userStats.status === "approved");
+              const userClassArray = Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass];
+              
+              const filteredProblems = rawProblems.filter(p => {
+                if (canViewAll) return true;
+                if (!p.targetClasses || p.targetClasses.includes("global")) return true;
+                return p.targetClasses.some(c => userClassArray.includes(c));
+              });
+
+              setAllCodingProblems(filteredProblems);
               setCodingChapters(chapSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             } catch (err) {
               console.error("Error fetching coding data:", err);
             }
           };
           fetchAllProblems();
-        }, [showContestModal, showAdminModal, showCodingChapterModal, isDbReady, codingSubTab, tab]);
+        }, [showContestModal, showAdminModal, showCodingChapterModal, isDbReady, codingSubTab, tab, userStats, isAdmin]);
 
         const [activeContests, setActiveContests] = useState([]);
         const [selectedContest, setSelectedContest] = useState(null);
@@ -3623,11 +3740,19 @@
               const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
               return timeB - timeA;
             });
-            setActiveContests(contests);
+            const canViewAll = isAdmin || (userStats.role === "teacher" && userStats.status === "approved");
+            const userClassArray = Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass];
+
+            const filteredContests = contests.filter(c => {
+                if (canViewAll) return true;
+                if (!c.targetClasses || c.targetClasses.includes("global")) return true;
+                return c.targetClasses.some(cls => userClassArray.includes(cls));
+            });
+            setActiveContests(filteredContests);
           });
 
           return () => unsubscribe();
-        }, [isDbReady]);
+        }, [isDbReady, userStats, isAdmin]);
 
         // Auth Logic
         const handleAuth = async () => {
@@ -3729,8 +3854,25 @@
         const logout = () => {
           localStorage.removeItem("informatics_username");
           localStorage.removeItem("informatics_local_id");
+          localStorage.removeItem("informatics_ranks_final");
           setCurrentUsername("");
           setIsAdmin(false);
+          setUserStats({
+            stars: 0,
+            completedLessons: [],
+            completedContests: [],
+            userName: "",
+            userClass: "",
+            schoolId: "",
+            schoolName: "",
+          });
+          setTempName("");
+          setTempClass("");
+          setTempSchoolId("");
+          setTempAvatar("");
+          setTempRole("");
+          setTempCustomTitle("");
+          setAuthData({ username: "", password: "" });
           setSetupStep("auth");
           setShowSetup(true);
         };
@@ -3911,7 +4053,7 @@
               uid = "user_" + Math.random().toString(36).substr(2, 9);
               localStorage.setItem("informatics_local_id", uid);
             }
-
+            
             const statsForState = {
               ...userStats,
               userName: finalName,
@@ -3921,6 +4063,8 @@
               userId: uid,
               avatar: finalAvatar,
               customTitle: finalCustomTitle,
+              role: "student",
+              status: "approved",
               updatedAt: new Date().toISOString(),
             };
 
@@ -4021,9 +4165,12 @@
         const activeLesson =
           allLessons.find((l) => l.id === activeLessonId) || allLessons[0];
 
-        const handleQuizComplete = (score) => {
+        const handleQuizComplete = (score, total) => {
           setStreak(0); // Reset quiz streak visually
-          if (score >= 18) {
+          // Required correct answers to pass: >= 18 out of 20, or >= 90%
+          const passThreshold = Math.max(1, Math.floor(total * 0.9));
+          const isPassed = score >= passThreshold || (total >= 20 && score >= 18);
+          if (isPassed) {
             const stars = parseInt(userStats.stars) || 0;
             if (!userStats.completedLessons.includes(activeLessonId)) {
               const nextStars = stars + 1;
@@ -4034,7 +4181,7 @@
                 ...userStats,
                 stars: nextStars,
                 completedLessons: [
-                  ...userStats.completedLessons,
+                  ...(userStats.completedLessons || []),
                   activeLessonId,
                 ],
               };
@@ -4057,13 +4204,13 @@
                     "#0000ff",
                   ],
                 });
-
-                setTimeout(
-                  () =>
-                    alert(`CHÚC MỪNG! Bạn đã thăng hạng lên ${newRankName}!`),
-                  500,
-                );
+                alert(`Chúc mừng! Bạn đã được cộng thêm 1 sao và thăng hạng: ${newRankName} 🌟\n(Đạt ${score}/${total} câu)`);
+              } else {
+                alert(`Chúc mừng! Bạn đã hoàn thành xuất sắc và nhận được 1 sao! 🌟\n(Đạt ${score}/${total} câu)`);
               }
+            } else {
+                // Already completed, don't give star again but let them know
+                // alert(`Bạn đã đạt ${score}/${total} câu! (Bài này bạn đã nhận sao trước đó)`);
             }
           }
         };
@@ -4517,7 +4664,7 @@
                         { id: "quiz", label: "LUYỆN RANK", icon: "sword" },
                         { id: "flash", label: "GHI NHỚ", icon: "zap" },
                         { id: "leaderboard", label: "BXH", icon: "bar-chart" },
-                        { id: "contests", label: "KỲ THI", icon: "award" },
+                        { id: "contests", label: "KỲ THI", icon: "award" }
                       ].map((t) => (
                         <button
                           key={t.id}
@@ -4532,7 +4679,7 @@
                       ))}
                     </div>
 
-                    {isAdmin && (
+                    {(isAdmin || (userStats.role === "teacher" && userStats.status === "approved")) && (
                       <div className="flex gap-2 p-1">
                         <button
                           onClick={() => setShowAdminModal(true)}
@@ -4627,6 +4774,31 @@
                                   Lập trình
                                 </button>
                               </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Đối tượng
+                              </label>
+                              <select
+                                value={(contestForm.targetClasses && contestForm.targetClasses.includes("global")) ? "global" : "custom"}
+                                onChange={(e) => {
+                                  if (e.target.value === "global") {
+                                    setContestForm({ ...contestForm, targetClasses: ["global"] });
+                                  } else {
+                                    if (userStats.role === "teacher" && userStats.userClass) {
+                                      setContestForm({ ...contestForm, targetClasses: Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass] });
+                                    } else {
+                                      setContestForm({ ...contestForm, targetClasses: [] });
+                                    }
+                                  }
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                              >
+                                <option value="global">Công khai (Tất cả)</option>
+                                {userStats.role === "teacher" && (
+                                  <option value="custom">Chỉ lớp của tôi</option>
+                                )}
+                              </select>
                             </div>
                             <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -5177,10 +5349,27 @@
                             <div className="space-y-4">
                               <div className="flex justify-between items-center">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Câu hỏi trắc nghiệm</label>
-                                <button type="button" onClick={() => setAddLessonForm({...addLessonForm, questionPool: [...addLessonForm.questionPool, {question: "", options: ["","","",""], correct: 0, expl: ""}]})} className="text-emerald-500 font-black text-xs px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded">THÊM CÂU HỎI</button>
+                                <div className="flex gap-2">
+                                  <button type="button" onClick={() => setShowBulkInput(!showBulkInput)} className="text-blue-500 font-black text-xs px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded">NHẬP NHANH</button>
+                                  <button type="button" onClick={() => setAddLessonForm({...addLessonForm, questionPool: [...addLessonForm.questionPool, {question: "", options: ["","","",""], correct: 0, expl: ""}]})} className="text-emerald-500 font-black text-xs px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded">THÊM CÂU HỎI</button>
+                                </div>
                               </div>
+                              
+                              {showBulkInput && (
+                                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800 animate-in fade-in duration-300">
+                                      <p className="text-xs text-blue-600 dark:text-blue-400 mb-2 font-semibold">Dán danh sách câu hỏi. Chấp nhận các dạng "Câu 1:", "A. " "B. " và đánh dấu * cho đáp án đúng.</p>
+                                      <textarea
+                                          value={bulkText}
+                                          onChange={e => setBulkText(e.target.value)}
+                                          placeholder={`Câu 1: Câu hỏi?\nA. Đáp án 1\nB. Đáp án 2 *\nC. Đáp án 3\nD. Đáp án 4`}
+                                          className="w-full h-32 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 p-3 rounded-xl dark:text-white text-sm mb-3 outline-none"
+                                      />
+                                      <button type="button" onClick={parseBulkContent} className="w-full bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest py-3 rounded-xl hover:bg-blue-700 transition">TRÍCH XUẤT</button>
+                                  </div>
+                              )}
+
                               {addLessonForm.questionPool.map((q, qIdx) => (
-                                  <div key={qIdx} className="bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl space-y-3 relative">
+                                  <div key={qIdx} onKeyDown={(e) => handleKeyDown(e, qIdx)} className="bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl space-y-3 relative outline-none focus-within:ring-2 focus-within:ring-emerald-500/50 transition-all">
                                       <button type="button" onClick={() => {
                                           const nq = [...addLessonForm.questionPool];
                                           nq.splice(qIdx, 1);
@@ -5357,6 +5546,32 @@
                                 {codingChapters.map(ch => (
                                     <option key={ch.id} value={ch.id}>{ch.title}</option>
                                 ))}
+                              </select>
+                            </div>
+                            <div className="space-y-2 lg:col-span-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                Đối tượng
+                              </label>
+                              <select
+                                value={(adminForm.targetClasses && adminForm.targetClasses.includes("global")) ? "global" : "custom"}
+                                onChange={(e) => {
+                                  if (e.target.value === "global") {
+                                    setAdminForm({ ...adminForm, targetClasses: ["global"] });
+                                  } else {
+                                    // if teacher, default to their classes
+                                    if (userStats.role === "teacher" && userStats.userClass) {
+                                      setAdminForm({ ...adminForm, targetClasses: Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass] });
+                                    } else {
+                                      setAdminForm({ ...adminForm, targetClasses: [] });
+                                    }
+                                  }
+                                }}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                              >
+                                <option value="global">Công khai (Tất cả)</option>
+                                {userStats.role === "teacher" && (
+                                  <option value="custom">Chỉ lớp của tôi</option>
+                                )}
                               </select>
                             </div>
                             <div className="space-y-2 lg:col-span-1">

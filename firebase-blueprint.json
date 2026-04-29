@@ -2,20 +2,22 @@
   "entities": {
     "User": {
       "title": "User Profile",
-      "description": "Information about a student user",
+      "description": "Information about a user",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
         "userName": { "type": "string" },
-        "userClass": { "type": "string" },
+        "userClass": { "type": ["string", "array"] },
         "schoolId": { "type": "string" },
         "schoolName": { "type": "string" },
         "stars": { "type": "integer" },
         "completedLessons": { "type": "array" },
         "completedContests": { "type": "array" },
+        "role": { "type": "string" },
+        "status": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "userName", "userClass", "schoolId", "schoolName", "stars", "completedLessons", "completedContests", "updatedAt"]
+      "required": ["userId", "userName", "userClass", "schoolId", "schoolName", "role"]
     },
     "AuthUser": {
       "title": "Authentication Data",
@@ -43,10 +45,11 @@
         "sampleInput": { "type": "string" },
         "sampleOutput": { "type": "string" },
         "testCases": { "type": "array" },
+        "targetClasses": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },
         "createdBy": { "type": "string" }
       },
-      "required": ["title", "description", "difficulty", "createdAt"]
+      "required": ["title", "description", "difficulty", "createdAt", "targetClasses"]
     },
     "Match": {
       "title": "Competitive Match",
@@ -79,9 +82,10 @@
         "endTime": { "type": "string", "format": "date-time" },
         "rewardStars": { "type": "integer" },
         "problemIds": { "type": "array" },
+        "targetClasses": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "startTime", "endTime", "problemIds", "rewardStars"]
+      "required": ["title", "startTime", "endTime", "problemIds", "rewardStars", "targetClasses"]
     },
     "ContestSubmission": {
       "title": "Contest Submission",
