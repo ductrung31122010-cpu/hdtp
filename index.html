@@ -3531,6 +3531,36 @@
         const [bulkText, setBulkText] = useState("");
         const [showBulkInput, setShowBulkInput] = useState(false);
 
+        const [flashcardBulkText, setFlashcardBulkText] = useState("");
+        const [showFlashcardBulkInput, setShowFlashcardBulkInput] = useState(false);
+
+        const parseFlashcardBulkContent = () => {
+          if (!flashcardBulkText.trim()) return;
+          const lines = flashcardBulkText.split('\n').map(l => l.trim()).filter(Boolean);
+          let newCards = [];
+          lines.forEach(line => {
+             let separator = ':';
+             if (!line.includes(':') && line.includes('-')) separator = '-';
+             if (line.includes(separator)) {
+                 const [f, ...bArr] = line.split(separator);
+                 const b = bArr.join(separator).trim();
+                 if (f.trim() && b) {
+                     newCards.push({ f: f.trim(), b });
+                 }
+             }
+          });
+          if (newCards.length > 0) {
+              setAddLessonForm(prev => ({
+                  ...prev,
+                  flashcards: [...prev.flashcards, ...newCards]
+              }));
+              setShowFlashcardBulkInput(false);
+              setFlashcardBulkText("");
+          } else {
+              alert("Không nhận diện được. Hãy nhập định dạng 'Mặt trước : Mặt sau' hoặc 'Mặt trước - Mặt sau'");
+          }
+        };
+
         const parseBulkContent = () => {
           if (!bulkText.trim()) return;
           const blocks = bulkText.split(/(?=(?:Câu|Bài)\s*\d+[\.\:]|(?:\n|^)\d+[\.\:])/i).filter(b => b.trim());
@@ -5323,8 +5353,25 @@
                             <div className="space-y-4">
                               <div className="flex justify-between items-center">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ghi nhớ (Flashcards)</label>
-                                <button type="button" onClick={() => setAddLessonForm({...addLessonForm, flashcards: [...addLessonForm.flashcards, {f: "", b: ""}]})} className="text-emerald-500 font-black text-xs px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded">THÊM</button>
+                                <div className="flex gap-2">
+                                  <button type="button" onClick={() => setShowFlashcardBulkInput(!showFlashcardBulkInput)} className="text-blue-500 font-black text-xs px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded">NHẬP NHANH</button>
+                                  <button type="button" onClick={() => setAddLessonForm({...addLessonForm, flashcards: [...addLessonForm.flashcards, {f: "", b: ""}]})} className="text-emerald-500 font-black text-xs px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 rounded">THÊM</button>
+                                </div>
                               </div>
+                              
+                              {showFlashcardBulkInput && (
+                                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800 animate-in fade-in duration-300">
+                                      <p className="text-xs text-blue-600 dark:text-blue-400 mb-2 font-semibold">Dán danh sách flashcard. Định dạng: 'Mặt trước - Mặt sau' hoặc 'Mặt trước : Mặt sau' (mỗi thẻ 1 dòng).</p>
+                                      <textarea
+                                          value={flashcardBulkText}
+                                          onChange={e => setFlashcardBulkText(e.target.value)}
+                                          placeholder={`Thiết bị thông minh - Hoạt động tự chủ, kết nối\nIoT: Mạng lưới vạn vật kết nối Internet`}
+                                          className="w-full h-32 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 p-3 rounded-xl dark:text-white text-sm mb-3 outline-none"
+                                      />
+                                      <button type="button" onClick={parseFlashcardBulkContent} className="w-full bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest py-3 rounded-xl hover:bg-blue-700 transition">TRÍCH XUẤT</button>
+                                  </div>
+                              )}
+
                               {addLessonForm.flashcards.map((card, idx) => (
                                   <div key={idx} className="flex gap-4 items-center">
                                       <input type="text" value={card.f} onChange={(e) => {
