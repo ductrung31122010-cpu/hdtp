@@ -42,7 +42,11 @@
         increment,
         arrayUnion,
         limit,
+        setLogLevel
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+      // Suppress annoying Firestore warnings that break the iframe preview logger
+      try { setLogLevel("silent"); } catch(e) {}
 
       // Expose to window for the React app
       window.FirebaseModular = {
@@ -3569,38 +3573,45 @@
           let newQuestions = [];
 
           blocks.forEach(block => {
-            let lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-            if (lines.length === 0) return;
-
-            // Câu hỏi
-            let qText = lines[0].replace(/^(?:Câu|Bài)\s*\d+[\.\:]?\s*/i, '').replace(/^\d+[\.\:]\s*/, '').trim();
+            let content = block.replace(/^(?:(?:\n|^)\s*)?(?:Câu|Bài)?\s*\d+[\.\:]?\s*/i, '').replace(/^\d+[\.\:]\s*/, '').trim();
             
-            let optionsText = lines.slice(1).join(' ');
+            const optionStartMatch = content.match(/(?:^|\n)\s*[A-D][\.\)]\s/i);
+            
+            let qText = "";
+            let optionsText = "";
             let options = [];
             let correct = 0;
 
-            const optRegex = /([A-D][\.\)].+?)(?=[A-D][\.\)]|$)/gi;
-            let match;
-            while ((match = optRegex.exec(optionsText)) !== null) {
-              let opt = match[1];
-              let isCorrect = opt.includes('*');
-              opt = opt.replace(/^[A-D][\.\)]\s*/i, '').replace(/\*/g, '').trim();
-              if (options.length < 4) {
-                 if (isCorrect) correct = options.length;
-                 options.push(opt);
-              }
-            }
+            if (optionStartMatch) {
+                const optionStartIndex = optionStartMatch.index;
+                qText = content.substring(0, optionStartIndex).trim();
+                const adjustedIndex = content[optionStartIndex] === '\n' ? optionStartIndex + 1 : optionStartIndex;
+                optionsText = content.substring(adjustedIndex).trim();
 
-            // Fallback nếu không có A. B. C. D.
-            if (options.length === 0) {
-               lines.slice(1).forEach(l => {
-                   let isCorrect = l.includes('*');
-                   let opt = l.replace(/^[A-D][\.\)]\s*/i, '').replace(/\*/g, '').trim();
-                   if (options.length < 4) {
-                       if (isCorrect) correct = options.length;
-                       options.push(opt);
-                   }
-               });
+                const optRegex = /([A-D][\.\)].+?)(?=(?:\n|\s)*[A-D][\.\)]|$)/gis;
+                let match;
+                while ((match = optRegex.exec(optionsText)) !== null) {
+                    let opt = match[1];
+                    let isCorrect = opt.includes('*');
+                    opt = opt.replace(/^[A-D][\.\)]\s*/i, '').replace(/\*/g, '').trim();
+                    if (options.length < 4) {
+                        if (isCorrect) correct = options.length;
+                        options.push(opt);
+                    }
+                }
+            } else {
+                let lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+                if (lines.length > 0) {
+                    qText = lines[0];
+                    lines.slice(1).forEach(l => {
+                        let isCorrect = l.includes('*');
+                        let opt = l.replace(/^[A-D][\.\)]\s*/i, '').replace(/\*/g, '').trim();
+                        if (options.length < 4) {
+                            if (isCorrect) correct = options.length;
+                            options.push(opt);
+                        }
+                    });
+                }
             }
 
             while (options.length < 4) options.push("");
@@ -4552,9 +4563,9 @@
               )}
 
               {/* Desktop Sidebar */}
-              <aside className="hidden md:flex w-80 shrink-0 flex-col border-r border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 p-6 overflow-y-auto">
+              <aside className="hidden md:flex w-80 shrink-0 flex-col border-r border-slate-100 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 pt-6 px-6 overflow-hidden">
                 <div
-                  className={`mb-8 p-8 bg-gradient-to-b ${rank.bgColor} rounded-[32px] border border-white/10 shadow-2xl relative overflow-hidden flex flex-col items-center group`}
+                  className={`shrink-0 mb-6 p-8 bg-gradient-to-b ${rank.bgColor} rounded-[32px] border border-white/10 shadow-2xl relative overflow-hidden flex flex-col items-center group`}
                 >
                   <div className="absolute inset-0 bg-slate-900/40 -z-10"></div>
 
@@ -4650,20 +4661,23 @@
                 {isAdmin && (
                   <button
                     onClick={() => setShowAddLessonModal(true)}
-                    className="mb-4 w-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex justify-center items-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors border border-dashed border-blue-300 dark:border-blue-700"
+                    className="mb-4 w-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex justify-center items-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors border border-dashed border-blue-300 dark:border-blue-700 shrink-0"
                   >
                     <LucideIcon name="plus" className="w-4 h-4" /> THÊM BÀI HỌC
                   </button>
                 )}
-                {combinedChapters.map((ch) => (
-                  <SidebarChapter
-                    key={ch.id}
-                    chapter={ch}
-                    activeId={activeLessonId}
-                    setActiveId={setActiveLessonId}
-                    completedLessons={userStats.completedLessons || []}
-                  />
-                ))}
+                
+                <div className="flex-1 overflow-y-auto pr-2 pb-6 space-y-2 relative custom-scrollbar scroll-smooth" style={{ maxHeight: "calc(100vh - 350px)" }}>
+                  {combinedChapters.map((ch) => (
+                    <SidebarChapter
+                      key={ch.id}
+                      chapter={ch}
+                      activeId={activeLessonId}
+                      setActiveId={setActiveLessonId}
+                      completedLessons={userStats.completedLessons || []}
+                    />
+                  ))}
+                </div>
               </aside>
 
               {/* Main Content */}
