@@ -4351,7 +4351,7 @@
                 </div>
                 <div className="hidden sm:block">
                   <h1 className="font-display font-black text-xl tracking-tighter leading-none dark:text-white uppercase italic">
-                    INFOTIN 10
+                    INFOTIN
                   </h1>
                   <p className="text-[9px] font-black text-blue-500 uppercase tracking-[2px] mt-1">
                     Kết nối tri thức
@@ -4828,7 +4828,21 @@
                     {(isAdmin || (userStats.role === "teacher" && userStats.status === "approved")) && (
                       <div className="flex gap-2 p-1">
                         <button
-                          onClick={() => setShowAdminModal(true)}
+                          onClick={() => {
+                            setAdminForm({
+                              chapterId: "",
+                              title: "",
+                              description: "",
+                              descriptionType: "text",
+                              descriptionImage: "",
+                              difficulty: "easy",
+                              sampleInput: "",
+                              sampleOutput: "",
+                              testCases: [{ input: "", output: "" }],
+                              targetClasses: ["global"],
+                            });
+                            setShowAdminModal(true);
+                          }}
                           className="bg-emerald-500 text-white px-4 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 flex items-center gap-2 hover:scale-105 transition-all"
                         >
                           <LucideIcon
@@ -6024,6 +6038,35 @@
                                 );
                                 alert("Đã thêm bài tập thành công!");
                                 setShowAdminModal(false);
+                                setAdminForm({
+                                  chapterId: "",
+                                  title: "",
+                                  description: "",
+                                  descriptionType: "text",
+                                  descriptionImage: "",
+                                  difficulty: "easy",
+                                  sampleInput: "",
+                                  sampleOutput: "",
+                                  testCases: [{ input: "", output: "" }],
+                                  targetClasses: ["global"],
+                                });
+                                // We might also want to reload the problems so the newly added one shows up
+                                const fetchProblems = async () => {
+                                  try {
+                                      const snap = await fm.getDocs(fm.query(fm.collection(db, "coding_problems"), fm.orderBy("createdAt", "desc")));
+                                      const rawProblems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                                      // Same filter logic for the list
+                                      const canViewAll = (userStats && (userStats.role === "admin" || (userStats.role === "teacher" && userStats.status === "approved")));
+                                      const userClassArray = (userStats && userStats.userClass) ? (Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass]) : [];
+                                      const filteredProblems = rawProblems.filter(p => {
+                                        if (canViewAll) return true;
+                                        if (!p.targetClasses || p.targetClasses.includes("global")) return true;
+                                        return p.targetClasses.some(c => userClassArray.includes(c));
+                                      });
+                                      setAllCodingProblems(filteredProblems);
+                                  } catch(e) {}
+                                };
+                                fetchProblems();
                               } catch (err) {
                                 alert("Lỗi: " + err.message);
                               }
