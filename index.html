@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Leo rank Tin học 10 – Kết nối tri thức - Rank System</title>
+    <title>Cùng Học Tin học  – Kết nối tri thức - Rank System</title>
 
     <!-- Libraries CDN -->
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
@@ -3711,6 +3711,35 @@
           targetClasses: ["global"],
         });
 
+        const [bulkTestcaseText, setBulkTestcaseText] = useState("");
+        const [showBulkTestcaseInput, setShowBulkTestcaseInput] = useState(false);
+
+        const parseBulkTestcases = () => {
+          if (!bulkTestcaseText.trim()) return;
+          const items = bulkTestcaseText.split('###');
+          let newCases = [];
+          items.forEach((item) => {
+            if (!item.trim()) return;
+            const parts = item.split('//');
+            if (parts.length >= 2) {
+              const input = parts[0].trim();
+              const output = parts.slice(1).join('//').trim(); // In case output has // inside it
+              newCases.push({ input, output });
+            }
+          });
+
+          if (newCases.length > 0) {
+            setAdminForm({
+              ...adminForm,
+              testCases: [...adminForm.testCases.filter(tc => tc.input.trim() !== '' || tc.output.trim() !== ''), ...newCases]
+            });
+            setBulkTestcaseText("");
+            setShowBulkTestcaseInput(false);
+          } else {
+            alert("Không tìm thấy test case nào hợp lệ. Vui lòng kiểm tra lại định dạng.");
+          }
+        };
+
         const [quizEditor, setQuizEditor] = useState({
           type: "mcq", // 'mcq', 'tf'
           question: "",
@@ -4763,7 +4792,7 @@
                   </div>
 
                   <header className="space-y-6">
-                    <h2 className="text-5xl md:text-7xl font-display font-black tracking-tight leading-tight dark:text-white uppercase">
+                    <h2 className="text-4xl md:text-6xl font-display font-black tracking-tight leading-snug dark:text-white uppercase">
                       {activeLesson.title}
                     </h2>
                     <p className="text-xl text-slate-500 dark:text-slate-400 font-medium">
@@ -5764,8 +5793,7 @@
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                 Input mẫu
                               </label>
-                              <input
-                                type="text"
+                              <textarea
                                 value={adminForm.sampleInput}
                                 onChange={(e) =>
                                   setAdminForm({
@@ -5773,7 +5801,7 @@
                                     sampleInput: e.target.value,
                                   })
                                 }
-                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-mono text-sm dark:text-white"
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-mono text-sm dark:text-white h-24 resize-y"
                                 placeholder="Input..."
                               />
                             </div>
@@ -5781,8 +5809,7 @@
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                                 Output mẫu
                               </label>
-                              <input
-                                type="text"
+                              <textarea
                                 value={adminForm.sampleOutput}
                                 onChange={(e) =>
                                   setAdminForm({
@@ -5790,7 +5817,7 @@
                                     sampleOutput: e.target.value,
                                   })
                                 }
-                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-mono text-sm dark:text-white"
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-mono text-sm dark:text-white h-24 resize-y"
                                 placeholder="Output..."
                               />
                             </div>
@@ -5899,30 +5926,60 @@
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                 Dữ liệu Test Case ẩn
                               </label>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setAdminForm({
-                                    ...adminForm,
-                                    testCases: [
-                                      ...adminForm.testCases,
-                                      { input: "", output: "" },
-                                    ],
-                                  })
-                                }
-                                className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1"
-                              >
-                                <LucideIcon name="plus" className="w-3 h-3" />{" "}
-                                Thêm Test Case
-                              </button>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => setShowBulkTestcaseInput(!showBulkTestcaseInput)} className="text-blue-500 font-black text-xs px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded uppercase tracking-widest">NHẬP NHANH</button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAdminForm({
+                                      ...adminForm,
+                                      testCases: [
+                                        ...adminForm.testCases,
+                                        { input: "", output: "" },
+                                      ],
+                                    })
+                                  }
+                                  className="text-[10px] font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded uppercase tracking-widest flex items-center gap-1"
+                                >
+                                  <LucideIcon name="plus" className="w-3 h-3" />{" "}
+                                  Thêm
+                                </button>
+                              </div>
                             </div>
+                            
+                            {showBulkTestcaseInput && (
+                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800 animate-in fade-in duration-300">
+                                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2 font-semibold">
+                                    Nhập nhiều testcase. Mỗi cặp Input và Output được ngăn cách bởi dấu <code>###</code>. Giữa Input và Output của cùng một testcase được ngăn cách bởi dấu <code>//</code>.<br/>
+                                    Ví dụ:<br/>
+                                    1<br/>
+                                    // 2<br/>
+                                    ###<br/>
+                                    3<br/>
+                                    // 4
+                                  </p>
+                                  <textarea
+                                    value={bulkTestcaseText}
+                                    onChange={(e) => setBulkTestcaseText(e.target.value)}
+                                    placeholder="Input 1&#10;// Output 1&#10;###&#10;Input 2&#10;// Output 2"
+                                    className="w-full h-48 bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-800 p-4 rounded-xl text-sm font-mono dark:text-white resize-y"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={parseBulkTestcases}
+                                    className="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
+                                  >
+                                    Trích xuất Testcase
+                                  </button>
+                                </div>
+                            )}
+
                             {adminForm.testCases.map((tc, idx) => (
                               <div
                                 key={idx}
                                 className="grid md:grid-cols-2 gap-4 animate-in slide-in-from-left-4"
                               >
-                                <input
-                                  type="text"
+                                <textarea
                                   placeholder="Hidden Input"
                                   value={tc.input}
                                   onChange={(e) => {
@@ -5933,10 +5990,9 @@
                                       testCases: newList,
                                     });
                                   }}
-                                  className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-3 rounded-xl text-xs font-mono dark:text-white"
+                                  className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-3 rounded-xl text-xs font-mono dark:text-white h-24 resize-y"
                                 />
-                                <input
-                                  type="text"
+                                <textarea
                                   placeholder="Hidden Output"
                                   value={tc.output}
                                   onChange={(e) => {
@@ -5947,7 +6003,7 @@
                                       testCases: newList,
                                     });
                                   }}
-                                  className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-3 rounded-xl text-xs font-mono dark:text-white"
+                                  className="bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-3 rounded-xl text-xs font-mono dark:text-white h-24 resize-y"
                                 />
                               </div>
                             ))}
