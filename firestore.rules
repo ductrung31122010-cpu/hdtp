@@ -84,6 +84,11 @@ service cloud.firestore {
       allow create: if true; // Allow students to submit
     }
 
+    match /classes/{classId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /matches/{matchId} {
       allow read: if true;
       allow write: if true;
