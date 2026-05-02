@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cùng Học Tin học  – Kết nối tri thức - Rank System</title>
+    <title>Leo rank Tin học 10 – Kết nối tri thức - Rank System</title>
 
     <!-- Libraries CDN -->
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
@@ -12,6 +12,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.294.0/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.37.1/ace.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.37.1/theme-textmate.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.37.1/mode-python.js"></script>
@@ -3272,6 +3273,7 @@
         canEditAction,
         onEditLesson,
         onDeleteLesson,
+        requiredMap = {}
       }) => {
         const [open, setOpen] = useState(true);
         return (
@@ -3302,7 +3304,12 @@
                       >
                         <LucideIcon name="book" className="w-4 h-4" />
                       </div>
-                      <span className="flex-1 truncate">{lesson.title}</span>
+                      <div className="flex-1 min-w-0 flex flex-col">
+                          <span className="truncate">{lesson.title}</span>
+                          {requiredMap[lesson.id] && (
+                              <span className={`text-[8px] uppercase tracking-widest font-black mt-0.5 ${activeId === lesson.id ? 'text-white/80' : 'text-amber-500'}`}>BẮT BUỘC</span>
+                          )}
+                      </div>
                       {canEditAction && lesson.createdAt && (
                         <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                           <div
@@ -3458,6 +3465,370 @@
         );
       };
 
+      const StudentClassJoiner = ({ userStats, isDbReady, db, setUserStats }) => {
+         const [code, setCode] = useState("");
+         const [error, setError] = useState("");
+         const [loading, setLoading] = useState(false);
+         const [showInput, setShowInput] = useState(!userStats?.class_code);
+
+         if (!userStats || userStats.role !== "student") return null;
+
+         const handleJoin = async () => {
+            if(!code.trim()) return;
+            setLoading(true);
+            setError("");
+            try {
+               const fm = window.FirebaseModular;
+               const classCodeUpper = code.trim().toUpperCase();
+               const classRef = fm.doc(db, "classes", classCodeUpper);
+               const classSnap = await fm.getDoc(classRef);
+               if (!classSnap.exists()) {
+                  setError("Mã lớp không tồn tại!");
+                  setLoading(false);
+                  return;
+               }
+               
+               const newStats = { ...userStats, class_code: classCodeUpper };
+               setUserStats(newStats);
+
+               // update in firestore
+               const userRef = fm.doc(db, "users", userStats.userId);
+               await fm.updateDoc(userRef, { class_code: classCodeUpper });
+               
+               alert("Đã tham gia lớp thành công!");
+               setShowInput(false);
+            } catch (err) {
+               setError("Có lỗi xảy ra: " + err.message);
+            }
+            setLoading(false);
+         }
+
+         if (!showInput && userStats.class_code) {
+           return (
+             <div className="bg-emerald-50 dark:bg-emerald-900/10 border-2 border-emerald-200 dark:border-emerald-800 p-6 rounded-3xl mb-8 flex flex-col md:flex-row gap-6 items-center justify-between animate-in fade-in">
+                <div className="flex gap-4 items-center">
+                   <div className="w-12 h-12 bg-emerald-200 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0">
+                      <LucideIcon name="check-circle" className="w-6 h-6" />
+                   </div>
+                   <div>
+                      <h4 className="font-black text-emerald-800 dark:text-emerald-500 uppercase tracking-widest text-sm mb-1">Đã tham gia lớp ảo</h4>
+                      <p className="text-emerald-700 dark:text-emerald-600 font-medium text-xs">Mã lớp hiện tại của bạn là: <strong className="text-lg ml-1 font-black">{userStats.class_code}</strong></p>
+                   </div>
+                </div>
+                <button 
+                   onClick={() => setShowInput(true)}
+                   className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-black uppercase text-[10px] tracking-widest px-4 py-2 rounded-xl shrink-0 transition-colors border border-emerald-300"
+                >
+                   Đổi mã lớp
+                </button>
+             </div>
+           );
+         }
+
+         return (
+            <div className="bg-yellow-50 dark:bg-yellow-900/10 border-2 border-yellow-200 dark:border-yellow-800 p-6 rounded-3xl mb-8 flex flex-col md:flex-row gap-6 items-center justify-between animate-in fade-in">
+               <div className="flex gap-4 items-center">
+                  <div className="w-12 h-12 bg-yellow-200 text-yellow-600 rounded-2xl flex items-center justify-center shrink-0">
+                     <LucideIcon name="megaphone" className="w-6 h-6" />
+                  </div>
+                  <div>
+                     <h4 className="font-black text-yellow-800 dark:text-yellow-500 uppercase tracking-widest text-sm mb-1">Tham gia lớp học ảo</h4>
+                     <p className="text-yellow-700 dark:text-yellow-600 font-medium text-xs">Nhập mã lớp do giáo viên cung cấp để được lưu kết quả vào danh sách lớp.</p>
+                     {error && <p className="text-red-500 font-bold text-[10px] mt-1">{error}</p>}
+                  </div>
+               </div>
+               <div className="flex gap-2 w-full md:w-auto shrink-0">
+                  <input 
+                     type="text" 
+                     placeholder="Nhập mã lớp..."
+                     value={code}
+                     onChange={e => setCode(e.target.value)}
+                     className="bg-white dark:bg-slate-800 border-2 border-yellow-200 focus:border-yellow-500 rounded-xl px-4 py-2 font-black dark:text-white uppercase outline-none min-w-[150px] w-full"
+                  />
+                  <button 
+                     onClick={handleJoin}
+                     disabled={loading}
+                     className="bg-yellow-500 hover:bg-yellow-600 text-white font-black uppercase text-[10px] tracking-widest px-4 py-2 rounded-xl shrink-0"
+                  >
+                     {loading ? "..." : "Tham gia"}
+                  </button>
+                  {userStats.class_code && (
+                     <button 
+                        onClick={() => setShowInput(false)}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-600 font-black uppercase text-[10px] tracking-widest px-4 py-2 rounded-xl shrink-0 ml-2"
+                     >
+                        Hủy
+                     </button>
+                  )}
+               </div>
+            </div>
+         );
+      };
+
+      const TeacherDashboard = ({ userStats, isDbReady, db, combinedChapters }) => {
+        const [students, setStudents] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [classes, setClasses] = useState([]);
+        const [selectedClassCode, setSelectedClassCode] = useState(null);
+
+        const currentClassDoc = classes.find(c => c.id === selectedClassCode);
+        const requiredLessonsList = currentClassDoc?.requiredLessons || [];
+        const requiredLessonsMap = requiredLessonsList.reduce((acc, curr) => ({...acc, [curr]: true}), {});
+        const totalRequired = requiredLessonsList.length;
+
+        const toggleRequiredLesson = async (lessonId) => {
+            if (!selectedClassCode) return;
+            const fm = window.FirebaseModular;
+            const classRef = fm.doc(db, "classes", selectedClassCode);
+            const newRequired = requiredLessonsMap[lessonId]
+               ? requiredLessonsList.filter(id => id !== lessonId)
+               : [...requiredLessonsList, lessonId];
+            try {
+                await fm.updateDoc(classRef, { requiredLessons: newRequired });
+            } catch (e) {
+                alert("Lỗi lưu bài học bắt buộc: " + e.message);
+            }
+        };
+
+        const [searchQuery, setSearchQuery] = useState("");
+
+        useEffect(() => {
+          if (!isDbReady || !db || userStats.role !== "teacher") return;
+          const fm = window.FirebaseModular;
+          const q = fm.query(fm.collection(db, "classes"), fm.where("teacherId", "==", userStats.userId));
+          const unsub = fm.onSnapshot(q, (snap) => {
+              let arr = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              arr.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+              setClasses(arr);
+              if (arr.length > 0) {
+                  setSelectedClassCode(prev => prev ? (arr.some(c => c.id === prev) ? prev : arr[0].id) : arr[0].id);
+              } else {
+                  setSelectedClassCode(null);
+                  setLoading(false);
+              }
+          });
+          return () => unsub();
+        }, [isDbReady, db, userStats.userId, userStats.role]);
+
+        useEffect(() => {
+          if (!isDbReady || !db || !selectedClassCode) {
+            setStudents([]);
+            return;
+          }
+          setLoading(true);
+          const fm = window.FirebaseModular;
+          const q = fm.query(fm.collection(db, "users"), fm.where("class_code", "==", selectedClassCode));
+          const unsub = fm.onSnapshot(q, (snap) => {
+              const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              list.sort((a,b) => (b.stars || 0) - (a.stars || 0));
+              setStudents(list);
+              setLoading(false);
+          });
+          return () => unsub();
+        }, [isDbReady, db, selectedClassCode]);
+
+        const createClass = async () => {
+          try {
+            const fm = window.FirebaseModular;
+            const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+            await fm.setDoc(fm.doc(db, "classes", newCode), {
+              teacherId: userStats.userId,
+              createdAt: fm.serverTimestamp()
+            });
+            setSelectedClassCode(newCode);
+            alert("Đã tạo lớp thành công! Mã lớp của bạn là: " + newCode);
+          } catch (e) {
+            alert("Lỗi tạo lớp: " + e.message);
+          }
+        }
+
+        const exportExcel = () => {
+           if (!window.XLSX) {
+               alert("Đang tải công cụ xuất Excel, vui lòng thử lại sau.");
+               return;
+           }
+           const dataToExport = students.map((s, idx) => {
+              const completedRequiredStr = totalRequired > 0 ? `${(s.completedLessons || []).filter(id => !!requiredLessonsMap[id]).length} / ${totalRequired}` : "Không có";
+              
+              return {
+                 "STT": idx + 1,
+                 "Tên Học Sinh": s.userName || "Ẩn danh",
+                 "Rank": getRankInfo(s.stars || 0).name,
+                 "Số Sao": s.stars || 0,
+                 "Tổng Bài Học Đã Hoàn Thành": s.completedLessons?.length || 0,
+                 "Hoàn Thành Bài Bắt Buộc": completedRequiredStr,
+                 "Lớp (Trường)": `${s.userClass} (${s.schoolName || ""})`
+              };
+           });
+           const worksheet = window.XLSX.utils.json_to_sheet(dataToExport);
+           const workbook = window.XLSX.utils.book_new();
+           window.XLSX.utils.book_append_sheet(workbook, worksheet, "BaoCao");
+           window.XLSX.writeFile(workbook, `BAO_CAO_KET_QUA_HOC_TAP_LOP_${selectedClassCode}.xlsx`);
+        }
+
+        if (userStats.role !== "teacher") {
+          return <div className="p-10 text-center dark:text-white">Bạn không có quyền truy cập trang này.</div>;
+        }
+
+        const filteredStudents = students.filter(s => (s.userName || "Ẩn danh").toLowerCase().includes(searchQuery.toLowerCase()) || (s.userClass || "").toLowerCase().includes(searchQuery.toLowerCase()));
+
+        return (
+          <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-2xl border border-slate-100 dark:border-slate-800 p-8 md:p-12 animate-in fade-in duration-500">
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-100 dark:border-slate-800 pb-6 mb-8 gap-4">
+                <div>
+                  <h3 className="text-3xl font-black italic tracking-tighter uppercase mb-2 dark:text-white">Dashboard Giáo Viên</h3>
+                  <div className="flex items-center gap-2 mt-2">
+                     <p className="text-sm text-slate-500 font-bold uppercase tracking-widest">
+                        Quản lý học sinh - Mã lớp:
+                     </p>
+                     {classes.length > 0 ? (
+                        <select 
+                           value={selectedClassCode || ""} 
+                           onChange={e => setSelectedClassCode(e.target.value)}
+                           className="bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-black rounded-lg px-2 py-1 outline-none text-sm cursor-pointer"
+                        >
+                           {classes.map(c => (
+                              <option key={c.id} value={c.id}>{c.id}</option>
+                           ))}
+                        </select>
+                     ) : (
+                        <span className="text-slate-400 font-bold text-sm">Chưa tạo</span>
+                     )}
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                     <button onClick={createClass} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg hover:scale-105 transition-all">
+                        + Tạo Lớp Ảo Mới
+                     </button>
+                   {selectedClassCode && (
+                      <button onClick={exportExcel} className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg hover:scale-105 transition-all flex items-center gap-2">
+                         <LucideIcon name="download" className="w-4 h-4"/> Xuất Excel
+                      </button>
+                   )}
+                </div>
+             </div>
+
+             {selectedClassCode && students.length > 0 && (
+                <div className="mb-6 flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                   <LucideIcon name="search" className="w-5 h-5 text-slate-400" />
+                   <input
+                      type="text"
+                      placeholder="Tìm kiếm theo tên hoặc lớp học..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="bg-transparent border-none outline-none w-full font-black text-sm dark:text-white placeholder:text-slate-400"
+                   />
+                </div>
+             )}
+
+             {loading ? (
+               <div className="py-20 text-center"><p className="text-slate-400 font-bold uppercase tracking-widest">Đang tải dữ liệu...</p></div>
+             ) : classes.length === 0 ? (
+               <div className="py-20 text-center bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-700">
+                  <LucideIcon name="users" className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4"/>
+                  <h4 className="text-xl font-black text-slate-700 dark:text-white uppercase mb-2">Tạo Lớp Học Ảo Đầu Tiên</h4>
+                  <p className="text-slate-500 font-bold text-sm max-w-md mx-auto">Tạo một lớp học ảo để theo dõi tiến độ, số điểm và bài tập đã hoàn thành của học sinh.</p>
+               </div>
+             ) : students.length === 0 ? (
+               <div className="py-20 text-center bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-700">
+                  <LucideIcon name="users" className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4"/>
+                  <p className="text-slate-500 font-bold uppercase tracking-widest">Lớp học hiện tại chưa có học sinh.</p>
+                  <p className="text-xs text-slate-400 mt-2">Yêu cầu học sinh nhập mã <b className="text-blue-500">{selectedClassCode}</b> trên giao diện để tham gia.</p>
+               </div>
+             ) : filteredStudents.length === 0 ? (
+               <div className="py-10 text-center bg-slate-50 dark:bg-slate-800/30 rounded-3xl border border-slate-100 dark:border-slate-700">
+                  <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Không tìm thấy học sinh nào.</p>
+               </div>
+             ) : (
+               <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[600px]">
+                     <thead>
+                        <tr className="border-b-2 border-slate-100 dark:border-slate-800 text-xs font-black text-slate-400 uppercase tracking-widest">
+                           <th className="p-4">Học Sinh</th>
+                           <th className="p-4">Rank Hiện Tại</th>
+                           <th className="p-4">Số Sao</th>
+                           <th className="p-4">Hoàn Thành (Tổng/Bắt buộc)</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        {filteredStudents.map(s => {
+                           const rank = getRankInfo(s.stars || 0);
+                           const completedRequiredCount = (s.completedLessons || []).filter(id => !!requiredLessonsMap[id]).length;
+                           return (
+                             <tr key={s.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                <td className="p-4 font-bold dark:text-white flex items-center gap-3">
+                                   <img src={s.avatar} className="w-8 h-8 rounded-full bg-slate-200 shrink-0" alt="avatar" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+                                   <div>
+                                      <div>{s.userName}</div>
+                                      <div className="text-[10px] text-slate-400 top-0.5 relative">{s.userClass}</div>
+                                   </div>
+                                </td>
+                                <td className="p-4 font-bold max-w-[150px] truncate" style={{ color: rank.color }}>{rank.name}</td>
+                                <td className="p-4 font-bold text-amber-500">{s.stars || 0} ★</td>
+                                <td className="p-4 flex items-center gap-2">
+                                    <div className="flex flex-col">
+                                        <div className="font-bold text-slate-600 dark:text-slate-200 text-sm">Tổng: <span className="text-blue-500">{s.completedLessons?.length || 0}</span> bài</div>
+                                        {totalRequired > 0 && (
+                                            <div className="text-[10px] uppercase font-black tracking-widest mt-0.5 text-slate-400">
+                                                Bắt buộc: <span className={completedRequiredCount === totalRequired ? "text-emerald-500" : "text-amber-500"}>{completedRequiredCount} / {totalRequired}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </td>
+                             </tr>
+                           )
+                        })}
+                     </tbody>
+                  </table>
+               </div>
+             )}
+
+             {selectedClassCode && (
+               <div className="mt-12 border-t-2 border-slate-100 dark:border-slate-800 pt-8">
+                  <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                          <h4 className="text-xl font-black uppercase tracking-tighter text-slate-800 dark:text-white flex items-center gap-2">
+                              <LucideIcon name="check-square" className="w-6 h-6 text-emerald-500" />
+                              Quản Lý Bài Học Bắt Buộc
+                          </h4>
+                          <p className="text-sm text-slate-500 font-bold mt-1">Đánh dấu các bài học mà học sinh trong lớp {selectedClassCode} cần phải hoàn thành (Pass Quiz).</p>
+                      </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                     {combinedChapters && combinedChapters.map(ch => (
+                         <div key={ch.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-6 border-2 border-slate-100 dark:border-slate-700">
+                            <h5 className="font-black text-sm uppercase tracking-widest text-slate-700 dark:text-slate-300 mb-4 pb-3 border-b-2 border-slate-200 dark:border-slate-700">{ch.title}</h5>
+                            <div className="space-y-3">
+                                {ch.lessons.map(lesson => {
+                                    const isReq = !!requiredLessonsMap[lesson.id];
+                                    return (
+                                        <label key={lesson.id} className={`flex items-start gap-4 p-4 rounded-2xl cursor-pointer transition-all border-2 ${isReq ? 'bg-white dark:bg-slate-800 border-emerald-500 shadow-md' : 'bg-transparent border-transparent hover:bg-white/50 dark:hover:bg-slate-800'}`}>
+                                            <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="w-6 h-6 rounded cursor-pointer appearance-none border-2 border-slate-300 dark:border-slate-600 checked:bg-emerald-500 checked:border-emerald-500 transition-colors"
+                                                    checked={isReq}
+                                                    onChange={() => toggleRequiredLesson(lesson.id)}
+                                                />
+                                                {isReq && <LucideIcon name="check" className="absolute w-4 h-4 text-white pointer-events-none" />}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className={`font-bold ${isReq ? 'text-slate-800 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>{lesson.title}</div>
+                                            </div>
+                                        </label>
+                                    )
+                                })}
+                                {ch.lessons.length === 0 && <p className="text-xs font-bold text-slate-400 italic">Chưa có bài học nào.</p>}
+                            </div>
+                         </div>
+                     ))}
+                  </div>
+               </div>
+             )}
+          </div>
+        );
+      }
+
       const App = () => {
         const [error, setError] = useState(null);
 
@@ -3519,6 +3890,38 @@
         const [showPassword, setShowPassword] = useState(false);
         const [authError, setAuthError] = useState("");
         const [isAdmin, setIsAdmin] = useState(false);
+        const [managedClassCodes, setManagedClassCodes] = useState([]);
+
+        // Fetch managed classes for teacher
+        useEffect(() => {
+          if (!isDbReady || !db || userStats?.role !== "teacher") return;
+          const fm = window.FirebaseModular;
+          const q = fm.query(fm.collection(db, "classes"), fm.where("teacherId", "==", userStats.userId));
+          const unsub = fm.onSnapshot(q, snap => {
+              setManagedClassCodes(snap.docs.map(doc => doc.id));
+          });
+          return () => unsub();
+        }, [isDbReady, db, userStats]);
+
+        // Fetch student class data
+        const [studentClassData, setStudentClassData] = useState(null);
+        useEffect(() => {
+           if (!isDbReady || !db || !userStats?.class_code) return;
+           const fm = window.FirebaseModular;
+           const unsub = fm.onSnapshot(fm.doc(db, "classes", userStats.class_code), (doc) => {
+               if (doc.exists()) {
+                   setStudentClassData(doc.data());
+               } else {
+                   setStudentClassData(null);
+               }
+           });
+           return () => unsub();
+        }, [isDbReady, db, userStats?.class_code]);
+
+        const studentRequiredMap = useMemo(() => {
+             const reqs = studentClassData?.requiredLessons || [];
+             return reqs.reduce((acc, curr) => ({...acc, [curr]: true}), {});
+        }, [studentClassData]);
 
         // Identity Setup Modal States
         const [showSetup, setShowSetup] = useState(
@@ -3552,7 +3955,8 @@
           videoUrl: "",
           summary: [""],
           flashcards: [{ f: "", b: "" }],
-          questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }]
+          questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }],
+          isRequired: false
         });
 
         const [bulkText, setBulkText] = useState("");
@@ -3683,6 +4087,7 @@
         // --------------------------------
 
         const [codingSubTab, setCodingSubTab] = useState("practice"); // 'practice', 'contest'
+        const [selectedChapterId, setSelectedChapterId] = useState(null);
         const [allCodingProblems, setAllCodingProblems] = useState([]);
         const [codingChapters, setCodingChapters] = useState([]);
         const [showCodingChapterModal, setShowCodingChapterModal] = useState(false);
@@ -3798,8 +4203,8 @@
               ]);
               const rawProblems = probSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
               // Filter logic stringently based on constraints
-              const canViewAll = isAdmin || (userStats.role === "teacher" && userStats.status === "approved");
-              const userClassArray = Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass];
+              const canViewAll = isAdmin || userStats?.role === "teacher";
+              const userClassArray = [userStats.class_code || userStats.userClass || ""];
               
               const filteredProblems = rawProblems.filter(p => {
                 if (canViewAll) return true;
@@ -3833,8 +4238,8 @@
               const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
               return timeB - timeA;
             });
-            const canViewAll = isAdmin || (userStats.role === "teacher" && userStats.status === "approved");
-            const userClassArray = Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass];
+            const canViewAll = isAdmin || userStats?.role === "teacher";
+            const userClassArray = [userStats.class_code || userStats.userClass || ""];
 
             const filteredContests = contests.filter(c => {
                 if (canViewAll) return true;
@@ -4007,7 +4412,7 @@
                 fm.where(
                   "userClass",
                   "==",
-                  userStats.userClass.trim().toUpperCase(),
+                  String(Array.isArray(userStats.userClass) ? userStats.userClass[0] : userStats.userClass).trim().toUpperCase(),
                 ),
               );
             } else if (leaderboardTab === "school") {
@@ -4034,7 +4439,7 @@
                   return {
                     userId: d.userId || doc.id,
                     userName: d.userName || "Ẩn danh",
-                    userClass: (d.userClass || "").toUpperCase(),
+                    userClass: String(d.userClass || "").toUpperCase(),
                     schoolName: d.schoolName || "",
                     stars: parseInt(d.stars) || 0,
                     avatar: d.avatar || "",
@@ -4156,10 +4561,15 @@
               userId: uid,
               avatar: finalAvatar,
               customTitle: finalCustomTitle,
-              role: "student",
+              role: tempRole || "student",
               status: "approved",
               updatedAt: new Date().toISOString(),
             };
+            if ((tempRole || "student") === "student") {
+               statsForState.class_code = null;
+            } else {
+               statsForState.managed_classes = [];
+            }
 
             // Update UI immediately
             setUserStats(statsForState);
@@ -4351,7 +4761,7 @@
                 </div>
                 <div className="hidden sm:block">
                   <h1 className="font-display font-black text-xl tracking-tighter leading-none dark:text-white uppercase italic">
-                    INFOTIN
+                    INFOTIN 10
                   </h1>
                   <p className="text-[9px] font-black text-blue-500 uppercase tracking-[2px] mt-1">
                     Kết nối tri thức
@@ -4428,6 +4838,16 @@
                                   {userStats.schoolName || "Chưa cập nhật"}
                                 </span>
                               </div>
+                              {userStats.role === "student" && userStats.class_code && (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">
+                                    Lớp học Ảo (Giáo viên)
+                                  </span>
+                                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                    Mã: {userStats.class_code}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             <div className="pt-4 mt-4 border-t border-slate-50 dark:border-slate-800 flex flex-col gap-2">
@@ -4605,7 +5025,7 @@
                             setMobileMenu(false);
                           }}
                           completedLessons={userStats.completedLessons || []}
-                          canEditAction={isAdmin || (userStats && userStats.role === 'teacher' && userStats.status === 'approved')}
+                          canEditAction={isAdmin}
                           onEditLesson={(lesson) => {
                              setAddLessonForm({
                                 chapterId: lesson.chapterId || "",
@@ -4613,7 +5033,8 @@
                                 videoUrl: lesson.videoUrl || "",
                                 summary: lesson.summary || [""],
                                 flashcards: lesson.flashcards || [{f:"",b:""}],
-                                questionPool: lesson.questionPool || [{question:"",options:["","","",""],correct:0,expl:""}]
+                                questionPool: lesson.questionPool || [{question:"",options:["","","",""],correct:0,expl:""}],
+                                isRequired: lesson.isRequired || false
                              });
                              setEditingLessonId(lesson.id);
                              setShowAddLessonModal(true);
@@ -4630,6 +5051,7 @@
                                  } catch(e) { alert(e.message) }
                              }
                           }}
+                          requiredMap={studentRequiredMap}
                         />
                       ))}
                     </div>
@@ -4750,7 +5172,7 @@
                       activeId={activeLessonId}
                       setActiveId={setActiveLessonId}
                       completedLessons={userStats.completedLessons || []}
-                      canEditAction={isAdmin || (userStats && userStats.role === 'teacher' && userStats.status === 'approved')}
+                      canEditAction={isAdmin}
                       onEditLesson={(lesson) => {
                          setAddLessonForm({
                             chapterId: lesson.chapterId || "",
@@ -4758,7 +5180,8 @@
                             videoUrl: lesson.videoUrl || "",
                             summary: lesson.summary || [""],
                             flashcards: lesson.flashcards || [{f:"",b:""}],
-                            questionPool: lesson.questionPool || [{question:"",options:["","","",""],correct:0,expl:""}]
+                            questionPool: lesson.questionPool || [{question:"",options:["","","",""],correct:0,expl:""}],
+                            isRequired: lesson.isRequired || false
                          });
                          setEditingLessonId(lesson.id);
                          setShowAddLessonModal(true);
@@ -4774,6 +5197,7 @@
                              } catch(e) { alert(e.message) }
                          }
                       }}
+                      requiredMap={studentRequiredMap}
                     />
                   ))}
                 </div>
@@ -4785,6 +5209,7 @@
                   <HonorsPage isDbReady={isDbReady} db={db} setCurrentView={setCurrentView} />
                 ) : (
                   <div className="max-w-4xl mx-auto space-y-12">
+                    <StudentClassJoiner userStats={userStats} isDbReady={isDbReady} db={db} setUserStats={setUserStats} />
                     <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white dark:bg-slate-900 px-4 py-2 rounded-full w-fit border border-slate-100 dark:border-slate-800">
                       <span>NỘI DUNG</span>
                       <LucideIcon name="chevron-right" className="w-3 h-3" />
@@ -4810,7 +5235,8 @@
                         { id: "quiz", label: "LUYỆN RANK", icon: "sword" },
                         { id: "flash", label: "GHI NHỚ", icon: "zap" },
                         { id: "leaderboard", label: "BXH", icon: "bar-chart" },
-                        { id: "contests", label: "KỲ THI", icon: "award" }
+                        { id: "contests", label: "KỲ THI", icon: "award" },
+                        ...(userStats?.role === "teacher" ? [{ id: "teacher-class", label: "LỚP CỦA TÔI", icon: "users" }] : []),
                       ].map((t) => (
                         <button
                           key={t.id}
@@ -4825,7 +5251,7 @@
                       ))}
                     </div>
 
-                    {(isAdmin || (userStats.role === "teacher" && userStats.status === "approved")) && (
+                    {(isAdmin || userStats?.role === "teacher") && (
                       <div className="flex gap-2 p-1">
                         <button
                           onClick={() => {
@@ -4839,7 +5265,7 @@
                               sampleInput: "",
                               sampleOutput: "",
                               testCases: [{ input: "", output: "" }],
-                              targetClasses: ["global"],
+                              targetClasses: userStats?.role === "teacher" ? managedClassCodes : ["global"],
                             });
                             setShowAdminModal(true);
                           }}
@@ -4865,6 +5291,7 @@
                               startTime: startStr,
                               endTime: endStr,
                               questions: [],
+                              targetClasses: userStats?.role === "teacher" ? managedClassCodes : ["global"],
                             });
                             setShowContestModal(true);
                           }}
@@ -4935,31 +5362,27 @@
                                 </button>
                               </div>
                             </div>
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                Đối tượng
-                              </label>
-                              <select
-                                value={(contestForm.targetClasses && contestForm.targetClasses.includes("global")) ? "global" : "custom"}
-                                onChange={(e) => {
-                                  if (e.target.value === "global") {
-                                    setContestForm({ ...contestForm, targetClasses: ["global"] });
-                                  } else {
-                                    if (userStats.role === "teacher" && userStats.userClass) {
-                                      setContestForm({ ...contestForm, targetClasses: Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass] });
+                            {isAdmin && (
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Đối tượng
+                                </label>
+                                <select
+                                  value={(contestForm.targetClasses && contestForm.targetClasses.includes("global")) ? "global" : "custom"}
+                                  onChange={(e) => {
+                                    if (e.target.value === "global") {
+                                      setContestForm({ ...contestForm, targetClasses: ["global"] });
                                     } else {
                                       setContestForm({ ...contestForm, targetClasses: [] });
                                     }
-                                  }
-                                }}
-                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
-                              >
-                                <option value="global">Công khai (Tất cả)</option>
-                                {userStats.role === "teacher" && (
-                                  <option value="custom">Chỉ lớp của tôi</option>
-                                )}
-                              </select>
-                            </div>
+                                  }}
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                                >
+                                  <option value="global">Công khai (Tất cả)</option>
+                                  <option value="custom">Chỉ lớp được chọn</option>
+                                </select>
+                              </div>
+                            )}
                             <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                 Tiêu đề kỳ thi
@@ -5450,7 +5873,8 @@
                                   videoUrl: "",
                                   summary: [""],
                                   flashcards: [{ f: "", b: "" }],
-                                  questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }]
+                                  questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }],
+                                  isRequired: false
                                });
                             }}
                             className="text-slate-400 hover:text-red-500 transition-colors"
@@ -5646,7 +6070,8 @@
                                     videoUrl: "",
                                     summary: [""],
                                     flashcards: [{ f: "", b: "" }],
-                                    questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }]
+                                    questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }],
+                                    isRequired: false
                                   });
                                 } catch (err) {
                                   alert("Lỗi: " + err.message);
@@ -5770,20 +6195,13 @@
                                   if (e.target.value === "global") {
                                     setAdminForm({ ...adminForm, targetClasses: ["global"] });
                                   } else {
-                                    // if teacher, default to their classes
-                                    if (userStats.role === "teacher" && userStats.userClass) {
-                                      setAdminForm({ ...adminForm, targetClasses: Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass] });
-                                    } else {
-                                      setAdminForm({ ...adminForm, targetClasses: [] });
-                                    }
+                                    setAdminForm({ ...adminForm, targetClasses: userStats?.role === "teacher" ? managedClassCodes : [] });
                                   }
                                 }}
                                 className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
                               >
                                 <option value="global">Công khai (Tất cả)</option>
-                                {userStats.role === "teacher" && (
-                                  <option value="custom">Chỉ lớp của tôi</option>
-                                )}
+                                <option value="custom">Chỉ lớp được chọn</option>
                               </select>
                             </div>
                             <div className="space-y-2 lg:col-span-1">
@@ -6048,7 +6466,7 @@
                                   sampleInput: "",
                                   sampleOutput: "",
                                   testCases: [{ input: "", output: "" }],
-                                  targetClasses: ["global"],
+                                  targetClasses: userStats?.role === "teacher" ? managedClassCodes : ["global"],
                                 });
                                 // We might also want to reload the problems so the newly added one shows up
                                 const fetchProblems = async () => {
@@ -6056,7 +6474,7 @@
                                       const snap = await fm.getDocs(fm.query(fm.collection(db, "coding_problems"), fm.orderBy("createdAt", "desc")));
                                       const rawProblems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                                       // Same filter logic for the list
-                                      const canViewAll = (userStats && (userStats.role === "admin" || (userStats.role === "teacher" && userStats.status === "approved")));
+                                      const canViewAll = (userStats && (userStats.role === "admin" || userStats.role === "teacher"));
                                       const userClassArray = (userStats && userStats.userClass) ? (Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass]) : [];
                                       const filteredProblems = rawProblems.filter(p => {
                                         if (canViewAll) return true;
@@ -6149,6 +6567,10 @@
                       </div>
                     )}
 
+                    {tab === "teacher-class" && (
+                      <TeacherDashboard userStats={userStats} isDbReady={isDbReady} db={db} combinedChapters={combinedChapters} />
+                    )}
+
                     {tab === "contests" &&
                       (selectedContest ? (
                         <ContestActiveView
@@ -6239,7 +6661,7 @@
                                     </div>
                                   )}
 
-                                  {isAdmin && (
+                                  {(isAdmin || userStats?.role === "teacher") && (
                                     <button
                                       onClick={async (e) => {
                                         e.stopPropagation();
@@ -6335,85 +6757,112 @@
 
                           {codingSubTab === "practice" ? (
                             <div className="space-y-12">
-                              {[{ id: "", title: "Cơ bản / Chưa phân loại" }, ...codingChapters].map((ch) => {
-                                const chapterProblems = allCodingProblems.filter(p => (p.chapterId || "") === ch.id);
-                                if (chapterProblems.length === 0) return null;
-                                return (
-                                  <div key={ch.id} className="space-y-6">
-                                    <h3 className="text-2xl font-black uppercase italic dark:text-white border-b-2 border-slate-100 dark:border-slate-800 pb-2">
-                                      {ch.title}
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                      {chapterProblems.map((p, idx) => (
-                                        <div
-                                          key={p.id}
-                                          className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative group hover:scale-[1.02] transition-all"
-                                        >
-                                          <div className="flex justify-between items-start mb-6">
-                                            <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 group-hover:rotate-12 transition-transform italic font-black">
-                                              {idx + 1}
-                                            </div>
-                                            {isAdmin && (
-                                              <button
-                                                onClick={async (e) => {
-                                                  e.stopPropagation();
-                                                  if (window.confirm("Bạn có chắc chắn muốn xóa bài tập này?")) {
-                                                    try {
-                                                      const fm = window.FirebaseModular;
-                                                      await fm.deleteDoc(fm.doc(db, "coding_problems", p.id));
-                                                      setAllCodingProblems(allCodingProblems.filter(prob => prob.id !== p.id));
-                                                      alert("Đã xóa bài tập!");
-                                                    } catch (err) {
-                                                      alert("Lỗi: " + err.message);
-                                                    }
-                                                  }
-                                                }}
-                                                className="text-slate-300 hover:text-red-500 transition-colors p-2"
-                                                title="Xóa bài tập"
-                                              >
-                                                <LucideIcon name="trash" className="w-5 h-5" />
-                                              </button>
-                                            )}
+                              {selectedChapterId === null ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                  {[{ id: "", title: "Cơ bản / Chưa phân loại" }, ...codingChapters].map((ch) => {
+                                    const chapterProblemsCount = allCodingProblems.filter(p => (p.chapterId || "") === ch.id).length;
+                                    if (chapterProblemsCount === 0) return null;
+                                    return (
+                                      <div
+                                        key={ch.id}
+                                        onClick={() => setSelectedChapterId(ch.id)}
+                                        className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-xl cursor-pointer hover:border-blue-500 hover:scale-[1.02] transition-all flex flex-col justify-between"
+                                      >
+                                        <div>
+                                          <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600 mb-6 font-black">
+                                            <LucideIcon name="folder" className="w-6 h-6" />
                                           </div>
-                                          <h4 className="text-xl font-black mb-1 uppercase italic tracking-tighter dark:text-white line-clamp-1">
-                                            {p.title}
+                                          <h4 className="text-xl font-black mb-1 uppercase italic tracking-tighter dark:text-white line-clamp-2">
+                                            {ch.title}
                                           </h4>
-                                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
-                                            Đã thêm bởi: {p.createdBy || "Hệ thống"}
-                                          </p>
-
-                                          <button
-                                            onClick={() =>
-                                              setSelectedContest({
-                                                id: "practice_view",
-                                                title: "Tự luyện bài tập",
-                                                type: "coding",
-                                                durationMinutes: 120,
-                                                problemIds: [p.id],
-                                                rewardStars: 0,
-                                              })
-                                            }
-                                            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-transform"
-                                          >
-                                            Bắt đầu làm bài
-                                          </button>
                                         </div>
-                                      ))}
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-6">
+                                          {chapterProblemsCount} Bài tập
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                  {allCodingProblems.length === 0 && (
+                                    <div className="col-span-full py-20 text-center space-y-4">
+                                      <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-300">
+                                        <LucideIcon name="file-question" className="w-10 h-10" />
+                                      </div>
+                                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                        Chưa có bài tập nào được thêm
+                                      </p>
                                     </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                  <div className="flex items-center gap-4 border-b-2 border-slate-100 dark:border-slate-800 pb-4">
+                                    <button
+                                      onClick={() => setSelectedChapterId(null)}
+                                      className="text-slate-400 hover:text-blue-600 flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-colors bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-xl"
+                                    >
+                                      <LucideIcon name="arrow-left" className="w-4 h-4" />
+                                      Quay lại
+                                    </button>
+                                    <h3 className="text-2xl font-black uppercase italic dark:text-white">
+                                      {([{ id: "", title: "Cơ bản / Chưa phân loại" }, ...codingChapters].find(ch => ch.id === selectedChapterId) || {}).title}
+                                    </h3>
                                   </div>
-                                );
-                              })}
-                              {allCodingProblems.length === 0 && (
-                                <div className="col-span-full py-20 text-center space-y-4">
-                                  <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-300">
-                                    <LucideIcon
-                                      name="file-question"
-                                      className="w-10 h-10"
-                                    />
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {allCodingProblems.filter(p => (p.chapterId || "") === selectedChapterId).map((p, idx) => (
+                                      <div
+                                        key={p.id}
+                                        className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative group hover:scale-[1.02] transition-all"
+                                      >
+                                        <div className="flex justify-between items-start mb-6">
+                                          <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-600 group-hover:rotate-12 transition-transform italic font-black">
+                                            {idx + 1}
+                                          </div>
+                                          {(isAdmin || userStats?.role === "teacher") && (
+                                            <button
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm("Bạn có chắc chắn muốn xóa bài tập này?")) {
+                                                  try {
+                                                    const fm = window.FirebaseModular;
+                                                    await fm.deleteDoc(fm.doc(db, "coding_problems", p.id));
+                                                    setAllCodingProblems(allCodingProblems.filter(prob => prob.id !== p.id));
+                                                    alert("Đã xóa bài tập!");
+                                                  } catch (err) {
+                                                    alert("Lỗi: " + err.message);
+                                                  }
+                                                }
+                                              }}
+                                              className="text-slate-300 hover:text-red-500 transition-colors p-2"
+                                              title="Xóa bài tập"
+                                            >
+                                              <LucideIcon name="trash" className="w-5 h-5" />
+                                            </button>
+                                          )}
+                                        </div>
+                                        <h4 className="text-xl font-black mb-1 uppercase italic tracking-tighter dark:text-white line-clamp-1">
+                                          {p.title}
+                                        </h4>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">
+                                          Đã thêm bởi: {p.createdBy || "Hệ thống"}
+                                        </p>
+                                        <button
+                                          onClick={() =>
+                                            setSelectedContest({
+                                              id: "practice_view",
+                                              title: "Tự luyện bài tập",
+                                              type: "coding",
+                                              durationMinutes: 120,
+                                              problemIds: [p.id],
+                                              rewardStars: 0,
+                                            })
+                                          }
+                                          className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-500/20 hover:scale-[1.02] transition-transform"
+                                        >
+                                          Bắt đầu làm bài
+                                        </button>
+                                      </div>
+                                    ))}
                                   </div>
-                                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                                    Chưa có bài tập nào được thêm
-                                  </p>
                                 </div>
                               )}
                             </div>
@@ -6757,6 +7206,7 @@
                               Tên đăng nhập
                             </label>
                             <input
+                              autoComplete="off"
                               type="text"
                               value={authData.username}
                               onChange={(e) =>
@@ -6776,6 +7226,7 @@
                             </label>
                             <div className="relative">
                               <input
+                                autoComplete="off"
                                 type={showPassword ? "text" : "password"}
                                 value={authData.password}
                                 onChange={(e) =>
@@ -6863,6 +7314,29 @@
                         </div>
 
                         <div className="space-y-6">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[3px] ml-4">
+                              Vai trò của bạn
+                            </label>
+                            <div className="flex gap-4">
+                              <button
+                                onClick={() => setTempRole("student")}
+                                className={`flex-1 py-4 rounded-2xl font-black transition-all ${(!tempRole || tempRole === "student") ? "bg-blue-600 text-white shadow-lg" : "bg-slate-100 dark:bg-slate-800 text-slate-400"}`}
+                              >
+                                Học sinh
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setTempRole("teacher");
+                                  if (!tempClass) setTempClass("Giáo viên");
+                                }}
+                                className={`flex-1 py-4 rounded-2xl font-black transition-all ${tempRole === "teacher" ? "bg-purple-600 text-white shadow-lg" : "bg-slate-100 dark:bg-slate-800 text-slate-400"}`}
+                              >
+                                Giáo viên
+                              </button>
+                            </div>
+                          </div>
+
                           <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[3px] ml-4">
                               Họ và tên của bạn
