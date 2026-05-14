@@ -1752,7 +1752,7 @@
           return unsubscribe;
         }, [contest.id, contest.type]);
 
-        const handleProblemSubmit = async (isCorrect) => {
+        const handleProblemSubmit = async (isCorrect, earnedScore) => {
           try {
             const fm = window.FirebaseModular;
             const myId = localStorage.getItem("informatics_local_id");
@@ -1764,6 +1764,7 @@
               contestId: contest.id,
               problemId: selectedProb.id,
               isCorrect: isCorrect,
+              score: earnedScore || 0,
               submittedAt: new Date().toISOString(),
             });
 
@@ -2317,8 +2318,14 @@
             setIsGrading(false);
 
             const allCorrect = finalResults.every((r) => r.status === "AC");
+            const correctCount = finalResults.filter((r) => r.status === "AC").length;
+            const totalCount = finalResults.length;
+            const percentage = totalCount > 0 ? correctCount / totalCount : 0;
+            const maxScore = Number(problem.points) || 10;
+            const earnedScore = percentage * maxScore;
+
             if (isContest && onContestSubmit) {
-              onContestSubmit(allCorrect);
+              onContestSubmit(allCorrect, earnedScore);
             }
           } catch (err) {
             console.error(err);
@@ -3312,7 +3319,7 @@
                               <span className={`text-[8px] uppercase tracking-widest font-black mt-0.5 ${activeId === lesson.id ? 'text-white/80' : 'text-amber-500'}`}>BẮT BUỘC</span>
                           )}
                       </div>
-                      {canEditAction && lesson.createdAt && (
+                      {canEditAction && (
                         <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                           <div
                             onClick={(e) => { e.stopPropagation(); onEditLesson(lesson); }}
@@ -4208,17 +4215,30 @@
                   board[uid] = {
                     name: s.userName,
                     class: s.userClass,
-                    correct: 0,
+                    correct: 0, // This will now represent total score
                     time: 0,
                     problems: {}
                   };
                 }
-                if (s.isCorrect && !board[uid].problems[s.problemId]) {
-                  board[uid].correct += 1;
-                  board[uid].problems[s.problemId] = true;
-                  const submitTime = new Date(s.submittedAt).getTime();
-                  if (submitTime > board[uid].time) {
-                    board[uid].time = submitTime;
+                
+                // s.score might be present, or missing if old submission
+                let earned = 0;
+                if (s.score !== undefined) {
+                  earned = Number(s.score);
+                } else if (s.isCorrect) {
+                  earned = 10; // default for old correct subs
+                }
+
+                if (earned > 0) {
+                  // Only update if earned > previous max score for this problem
+                  const prevBest = board[uid].problems[s.problemId] || 0;
+                  if (earned > prevBest) {
+                    board[uid].correct += (earned - prevBest);
+                    board[uid].problems[s.problemId] = earned;
+                    const submitTime = new Date(s.submittedAt).getTime();
+                    if (submitTime > board[uid].time) {
+                      board[uid].time = submitTime;
+                    }
                   }
                 }
               });
@@ -4280,12 +4300,12 @@
                                   </div>
                                 </td>
                                 <td className="px-6 py-4 text-center border-r-2 border-slate-100 dark:border-slate-800/50">
-                                  <div className="font-black text-xl text-purple-600 dark:text-purple-400 drop-shadow-sm">{u.correct * 10}</div>
+                                  <div className="font-black text-xl text-purple-600 dark:text-purple-400 drop-shadow-sm">{u.correct}</div>
                                 </td>
                                 {problemsInChapter.map(p => (
                                   <td key={p.id} className="px-4 py-4 text-center border-l border-slate-50 dark:border-slate-800/20">
                                      {u.problems[p.id] ? (
-                                       <span className="text-emerald-500 font-black bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 rounded-lg inline-block w-full text-center shadow-inner">10</span>
+                                       <span className="text-emerald-500 font-black bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 rounded-lg inline-block w-full text-center shadow-inner">{u.problems[p.id]}</span>
                                      ) : (
                                        <span className="text-slate-300 dark:text-slate-700 font-bold">-</span>
                                      )}
@@ -4417,6 +4437,10 @@
           userStats.customTitle || "",
         );
         const [leaderboardTab, setLeaderboardTab] = useState(userStats?.role === "teacher" ? "school" : "class"); // 'class', 'school', 'province'
+        const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState(() => {
+          if (Array.isArray(userStats?.userClass) && userStats.userClass.length > 0) return userStats.userClass[0];
+          return userStats?.userClass || "";
+        });
         const [showUserInfoCard, setShowUserInfoCard] = useState(false);
         const [showAdminModal, setShowAdminModal] = useState(false);
         const [showContestModal, setShowContestModal] = useState(false);
@@ -4425,6 +4449,7 @@
         const [showAddLessonModal, setShowAddLessonModal] = useState(false);
         const [editingLessonId, setEditingLessonId] = useState("");
         const [customLessonsData, setCustomLessonsData] = useState([]);
+        const [customLessonChapters, setCustomLessonChapters] = useState([]);
         const [addLessonForm, setAddLessonForm] = useState({
           chapterId: "ch1",
           targetGrade: "10",
@@ -4554,15 +4579,17 @@
 
         const combinedChapters = useMemo(() => {
           const uGrade = userStats?.grade || "10";
-          return CHAPTERS_DATA.map(ch => {
+          const allChapters = [...CHAPTERS_DATA, ...customLessonChapters];
+          return allChapters.map(ch => {
             const extra = customLessonsData.filter(l => l.chapterId === ch.id && (l.targetGrade || "10") === uGrade);
-            const baseLessons = ch.lessons.filter(l => (l.targetGrade || "10") === uGrade);
+            const extraIds = extra.map(e => e.id);
+            const baseLessons = (ch.lessons || []).filter(l => (l.targetGrade || "10") === uGrade && !extraIds.includes(l.id));
             return {
               ...ch,
               lessons: [...baseLessons, ...extra]
             };
           }).filter(ch => ch.lessons.length > 0 || userStats?.role === 'admin');
-        }, [customLessonsData, userStats?.grade, userStats?.role]);
+        }, [customLessonsData, customLessonChapters, userStats?.grade, userStats?.role]);
         // --------------------------------
 
         const [codingSubTab, setCodingSubTab] = useState("practice"); // 'practice', 'contest'
@@ -4579,6 +4606,7 @@
           descriptionType: "text", // 'text' | 'image'
           descriptionImage: "", // base64 or URL
           difficulty: "easy",
+          points: 10,
           sampleInput: "",
           sampleOutput: "",
           testCases: [{ input: "", output: "" }],
@@ -4654,6 +4682,15 @@
               setCustomLessonsData(
                 snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
               );
+              
+              const cq = fm.query(
+                fm.collection(db, "custom_lesson_chapters"),
+                fm.orderBy("createdAt", "asc")
+              );
+              const csnap = await fm.getDocs(cq);
+              setCustomLessonChapters(
+                csnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+              );
             } catch (err) {
               const authInfo = auth.currentUser || {};
               const errInfo = {
@@ -4689,7 +4726,10 @@
               const userClassArray = [userStats.class_code || userStats.userClass || ""];
               
               const filteredProblems = rawProblems.filter(p => {
-                if (canViewAll) return true;
+                if (isAdmin) return true;
+                if (userStats?.role === "teacher") {
+                  return p.createdById === userStats.userId || p.createdBy === userStats.userName || !p.targetClasses || p.targetClasses.includes("global");
+                }
                 if (!p.targetClasses || p.targetClasses.includes("global")) return true;
                 return p.targetClasses.some(c => userClassArray.includes(c));
               });
@@ -4889,10 +4929,11 @@
 
             if (leaderboardTab === "class") {
               if (userStats.role === "teacher") {
-                if (!userStats.schoolId) return;
+                if (!userStats.schoolId || !selectedLeaderboardClass) return;
                 q = fm.query(
                   usersRef,
-                  fm.where("schoolId", "==", userStats.schoolId)
+                  fm.where("schoolId", "==", userStats.schoolId),
+                  fm.where("userClass", "==", String(selectedLeaderboardClass).trim().toUpperCase())
                 );
               } else {
                 if (!userStats.schoolId || !userStats.userClass) return;
@@ -4925,7 +4966,7 @@
                   return;
                 }
 
-                const data = snap.docs.filter(doc => doc.data().role !== "teacher").map((doc) => {
+                const data = snap.docs.filter(doc => leaderboardTab === "province" || doc.data().role !== "teacher").map((doc) => {
                   const d = doc.data();
                   return {
                     userId: d.userId || doc.id,
@@ -4965,6 +5006,7 @@
           userStats.userClass,
           userStats.schoolId,
           leaderboardTab,
+          selectedLeaderboardClass,
           isDbReady,
           db,
         ]);
@@ -5245,13 +5287,31 @@
                   <h3 className="text-3xl font-black italic tracking-tighter uppercase mb-2 dark:text-white">
                     Bảng xếp hạng
                   </h3>
-                  <p className="text-sm text-slate-500 font-bold uppercase tracking-widest">
-                    {leaderboardTab === "class"
-                      ? `Lớp ${userStats.userClass} - ${userStats.schoolName}`
-                      : leaderboardTab === "school"
-                        ? userStats.schoolName
-                        : "Toàn tỉnh Nghệ An"}
-                  </p>
+                  <div className="text-sm text-slate-500 font-bold uppercase tracking-widest flex items-center gap-2">
+                    {leaderboardTab === "class" ? (
+                      userStats?.role === "teacher" || isAdmin ? (
+                        <div className="flex items-center gap-2">
+                          Lớp
+                          <select 
+                            value={selectedLeaderboardClass}
+                            onChange={(e) => setSelectedLeaderboardClass(e.target.value)}
+                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded-lg text-blue-600 dark:text-blue-400 max-w-[150px]"
+                          >
+                            {(Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass]).map(cls => (
+                               <option key={cls} value={cls}>{cls}</option>
+                            ))}
+                          </select>
+                          - {userStats.schoolName}
+                        </div>
+                      ) : (
+                        `Lớp ${userStats.userClass} - ${userStats.schoolName}`
+                      )
+                    ) : leaderboardTab === "school" ? (
+                      userStats.schoolName
+                    ) : (
+                      "Toàn tỉnh Nghệ An"
+                    )}
+                  </div>
                 </div>
                 <div className="flex p-1.5 bg-slate-200 dark:bg-slate-950 rounded-2xl">
                   {[
@@ -5944,6 +6004,7 @@
                                   descriptionType: "text",
                                   descriptionImage: "",
                                   difficulty: "easy",
+                                  points: 10,
                                   sampleInput: "",
                                   sampleOutput: "",
                                   testCases: [{ input: "", output: "" }],
@@ -6325,25 +6386,39 @@
                                             {idx + 1}
                                           </div>
                                           {(isAdmin || userStats?.role === "teacher") && (
-                                            <button
-                                              onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (window.confirm("Bạn có chắc chắn muốn xóa bài tập này?")) {
-                                                  try {
-                                                    const fm = window.FirebaseModular;
-                                                    await fm.deleteDoc(fm.doc(db, "coding_problems", p.id));
-                                                    setAllCodingProblems(allCodingProblems.filter(prob => prob.id !== p.id));
-                                                    alert("Đã xóa bài tập!");
-                                                  } catch (err) {
-                                                    alert("Lỗi: " + err.message);
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingAdminFormId(p.id);
+                                                    setAdminForm({ ...p, testCases: p.testCases?.length ? p.testCases : [{ input: "", output: "" }] });
+                                                    setShowAdminModal(true);
+                                                }}
+                                                className="text-slate-300 hover:text-blue-500 transition-colors p-2"
+                                                title="Sửa bài tập"
+                                              >
+                                                <LucideIcon name="edit-2" className="w-5 h-5" />
+                                              </button>
+                                              <button
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  if (window.confirm("Bạn có chắc chắn muốn xóa bài tập này?")) {
+                                                    try {
+                                                      const fm = window.FirebaseModular;
+                                                      await fm.deleteDoc(fm.doc(db, "coding_problems", p.id));
+                                                      setAllCodingProblems(allCodingProblems.filter(prob => prob.id !== p.id));
+                                                      alert("Đã xóa bài tập!");
+                                                    } catch (err) {
+                                                      alert("Lỗi: " + err.message);
+                                                    }
                                                   }
-                                                }
-                                              }}
-                                              className="text-slate-300 hover:text-red-500 transition-colors p-2"
-                                              title="Xóa bài tập"
-                                            >
-                                              <LucideIcon name="trash" className="w-5 h-5" />
-                                            </button>
+                                                }}
+                                                className="text-slate-300 hover:text-red-500 transition-colors p-2"
+                                                title="Xóa bài tập"
+                                              >
+                                                <LucideIcon name="trash" className="w-5 h-5" />
+                                              </button>
+                                            </div>
                                           )}
                                         </div>
                                         <h4 className="text-xl font-black mb-1 uppercase italic tracking-tighter dark:text-white line-clamp-1">
@@ -7175,13 +7250,40 @@
                               </select>
                             </div>
                             <div className="space-y-4">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chương</label>
+                              <div className="flex justify-between items-center">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chương</label>
+                                <button
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    const title = window.prompt("Nhập tên chương mới:");
+                                    if (title) {
+                                      try {
+                                        const fm = window.FirebaseModular;
+                                        const docRef = await fm.addDoc(fm.collection(db, "custom_lesson_chapters"), {
+                                          title: title,
+                                          createdAt: fm.serverTimestamp()
+                                        });
+                                        // Optioanlly fetch again or just wait, it will stream or fetch. But for now manually fetch
+                                        const cq = fm.query(fm.collection(db, "custom_lesson_chapters"), fm.orderBy("createdAt", "asc"));
+                                        const csnap = await fm.getDocs(cq);
+                                        setCustomLessonChapters(csnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                                        setAddLessonForm({...addLessonForm, chapterId: docRef.id});
+                                      } catch (err) {
+                                        alert("Lỗi: " + err.message);
+                                      }
+                                    }
+                                  }}
+                                  className="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-600 transition-colors bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-full"
+                                >
+                                  + Tạo chương mới
+                                </button>
+                              </div>
                               <select
                                   value={addLessonForm.chapterId}
                                   onChange={(e) => setAddLessonForm({...addLessonForm, chapterId: e.target.value})}
                                   className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
                               >
-                                {CHAPTERS_DATA.map(ch => (
+                                {[...CHAPTERS_DATA, ...customLessonChapters].map(ch => (
                                     <option key={ch.id} value={ch.id}>{ch.title}</option>
                                 ))}
                               </select>
@@ -7312,10 +7414,10 @@
                                     summary: addLessonForm.summary.filter(s => s.trim() !== ""),
                                   };
                                   if (editingLessonId) {
-                                      await fm.updateDoc(fm.doc(db, "custom_lessons", editingLessonId), {
+                                      await fm.setDoc(fm.doc(db, "custom_lessons", editingLessonId), {
                                           ...data,
                                           updatedAt: fm.serverTimestamp()
-                                      });
+                                      }, { merge: true });
                                       alert("Cập nhật bài học thành công!");
                                   } else {
                                       await fm.addDoc(fm.collection(db, "custom_lessons"), {
@@ -7404,6 +7506,8 @@
                                 const fm = window.FirebaseModular;
                                 await fm.addDoc(fm.collection(db, "coding_chapters"), {
                                   title: codingChapterTitle,
+                                  createdBy: currentUsername,
+                                  createdById: userStats?.userId || myId,
                                   createdAt: fm.serverTimestamp()
                                 });
                                 setCodingChapterTitle("");
@@ -7465,7 +7569,7 @@
                                 className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
                               >
                                 <option value="">Không có chương</option>
-                                {codingChapters.map(ch => (
+                                {codingChapters.filter(ch => isAdmin || !ch.createdById || ch.createdById === userStats?.userId).map(ch => (
                                     <option key={ch.id} value={ch.id}>{ch.title}</option>
                                 ))}
                               </select>
@@ -7595,6 +7699,24 @@
                                   </button>
                                 ))}
                               </div>
+                            </div>
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                                Điểm tối đa
+                              </label>
+                              <input
+                                type="number"
+                                value={adminForm.points || 10}
+                                onChange={(e) =>
+                                  setAdminForm({
+                                    ...adminForm,
+                                    points: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                                placeholder="VD: 10"
+                                min={1}
+                              />
                             </div>
                           </div>
 
@@ -7789,6 +7911,7 @@
                                   descriptionType: "text",
                                   descriptionImage: "",
                                   difficulty: "easy",
+                                  points: 10,
                                   sampleInput: "",
                                   sampleOutput: "",
                                   testCases: [{ input: "", output: "" }],
@@ -7800,10 +7923,12 @@
                                       const snap = await fm.getDocs(fm.query(fm.collection(db, "coding_problems"), fm.orderBy("createdAt", "desc")));
                                       const rawProblems = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                                       // Same filter logic for the list
-                                      const canViewAll = (userStats && (userStats.role === "admin" || userStats.role === "teacher"));
                                       const userClassArray = (userStats && userStats.userClass) ? (Array.isArray(userStats.userClass) ? userStats.userClass : [userStats.userClass]) : [];
                                       const filteredProblems = rawProblems.filter(p => {
-                                        if (canViewAll) return true;
+                                        if (isAdmin) return true;
+                                        if (userStats?.role === "teacher") {
+                                          return p.createdById === userStats.userId || p.createdBy === userStats.userName || !p.targetClasses || p.targetClasses.includes("global");
+                                        }
                                         if (!p.targetClasses || p.targetClasses.includes("global")) return true;
                                         return p.targetClasses.some(c => userClassArray.includes(c));
                                       });
