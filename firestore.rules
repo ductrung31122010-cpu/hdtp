@@ -74,6 +74,11 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    match /custom_lesson_chapters/{chapterId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /contests/{contestId} {
       allow read: if true;
       allow write: if true; // In production, restrict to admin
