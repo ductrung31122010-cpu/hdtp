@@ -4447,6 +4447,7 @@
         
         // --- ADD LESSON MODAL STATES ---
         const [showAddLessonModal, setShowAddLessonModal] = useState(false);
+        const [showImageModal, setShowImageModal] = useState(null);
         const [editingLessonId, setEditingLessonId] = useState("");
         const [customLessonsData, setCustomLessonsData] = useState([]);
         const [customLessonChapters, setCustomLessonChapters] = useState([]);
@@ -4455,6 +4456,7 @@
           targetGrade: "10",
           title: "",
           videoUrl: "",
+          mindmapImage: "",
           summary: [""],
           flashcards: [{ f: "", b: "" }],
           questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }],
@@ -5801,6 +5803,7 @@
                                     targetGrade: lesson.targetGrade || "10",
                                     title: lesson.title,
                                     videoUrl: lesson.videoUrl || "",
+                                    mindmapImage: lesson.mindmapImage || "",
                                     summary: lesson.summary || [""],
                                     flashcards: lesson.flashcards || [{f:"",b:""}],
                                     questionPool: lesson.questionPool || [{question:"",options:["","","",""],correct:0,expl:""}],
@@ -5952,6 +5955,7 @@
                                 targetGrade: lesson.targetGrade || "10",
                                 title: lesson.title,
                                 videoUrl: lesson.videoUrl || "",
+                                mindmapImage: lesson.mindmapImage || "",
                                 summary: lesson.summary || [""],
                                 flashcards: lesson.flashcards || [{f:"",b:""}],
                                 questionPool: lesson.questionPool || [{question:"",options:["","","",""],correct:0,expl:""}],
@@ -6009,6 +6013,7 @@
                           {[
                             { id: "study", label: "TỔNG QUAN", icon: "book-open" },
                             { id: "video", label: "BÀI GIẢNG", icon: "play-circle" },
+                            { id: "mindmap", label: "SƠ ĐỒ", icon: "share-2" },
                             { id: "quiz", label: "LUYỆN RANK", icon: "sword" },
                             { id: "flash", label: "GHI NHỚ", icon: "zap" },
                             { id: "leaderboard", label: "BXH", icon: "bar-chart" },
@@ -6161,6 +6166,29 @@
                                );
                            }
                         })()}
+                      </div>
+                    )}
+
+                    {tab === "mindmap" && activeLesson && (
+                      <div className="bg-white dark:bg-slate-900 p-8 md:p-14 rounded-[40px] shadow-2xl border border-slate-100 dark:border-slate-800 relative overflow-hidden group animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                        <h3 className="text-3xl font-black mb-10 flex items-center gap-5 font-display dark:text-white tracking-tighter uppercase italic">
+                          <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500 rounded-2xl flex items-center justify-center">
+                            <LucideIcon name="share-2" className="w-6 h-6" />
+                          </div>
+                          Sơ đồ tư duy
+                        </h3>
+                        {activeLesson.mindmapImage ? (
+                          <div className="relative w-full overflow-hidden rounded-3xl text-center flex flex-col items-center">
+                            <img src={activeLesson.mindmapImage} alt="Mindmap" className="w-full h-auto object-contain rounded-3xl cursor-pointer hover:scale-[1.01] transition-transform max-w-full" onClick={() => setShowImageModal(activeLesson.mindmapImage)} />
+                            <p className="mt-4 text-[10px] text-slate-400 cursor-pointer font-bold uppercase tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors" onClick={() => setShowImageModal(activeLesson.mindmapImage)}>PHÓNG TO HÌNH ẢNH</p>
+                          </div>
+                        ) : (
+                           <div className="text-center py-20 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
+                               <LucideIcon name="image-off" className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                               <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Chưa có sơ đồ tư duy cho bài học này</p>
+                           </div>
+                        )}
                       </div>
                     )}
 
@@ -7223,6 +7251,15 @@
                     </div>
                   )}
 
+                  {showImageModal && (
+                    <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowImageModal(null)}>
+                      <div className="absolute top-6 right-6 text-white hover:text-red-400 cursor-pointer p-2 bg-slate-800/50 rounded-full transition-colors z-10" onClick={() => setShowImageModal(null)}>
+                        <LucideIcon name="x" className="w-8 h-8" />
+                      </div>
+                      <img src={showImageModal} alt="Mindmap Fullscreen" className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()} />
+                    </div>
+                  )}
+
                   {/* Add Lesson Modal */}
                   {showAddLessonModal && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
@@ -7240,6 +7277,7 @@
                                   targetGrade: "10",
                                   title: "",
                                   videoUrl: "",
+                                  mindmapImage: "",
                                   summary: [""],
                                   flashcards: [{ f: "", b: "" }],
                                   questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }],
@@ -7271,6 +7309,34 @@
                                   placeholder="Ví dụ: https://www.youtube.com/watch?v=..."
                                   className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
                               />
+                            </div>
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sơ đồ tư duy (URL Hình ảnh hoặc Tải lên)</label>
+                              <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={addLessonForm.mindmapImage || ""}
+                                    onChange={(e) => setAddLessonForm({...addLessonForm, mindmapImage: e.target.value})}
+                                    placeholder="Ví dụ: https://example.com/image.png"
+                                    className="flex-1 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 p-4 rounded-2xl font-bold dark:text-white"
+                                />
+                                <label className="flex items-center justify-center px-4 py-4 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-2xl cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors font-black text-sm shrink-0">
+                                  TẢI ẢNH LÊN
+                                  <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if(file) {
+                                      const reader = new FileReader();
+                                      reader.onloadend = () => {
+                                        setAddLessonForm({...addLessonForm, mindmapImage: reader.result});
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }} />
+                                </label>
+                              </div>
+                              {addLessonForm.mindmapImage && (
+                                <img src={addLessonForm.mindmapImage} alt="Mindmap Preview" className="h-32 object-contain rounded-xl border border-slate-200 dark:border-slate-700" />
+                              )}
                             </div>
                             <div className="space-y-4">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Khối lớp (Áp dụng cho bài học này)</label>
@@ -7477,6 +7543,7 @@
                                     targetGrade: "10",
                                     title: "",
                                     videoUrl: "",
+                                    mindmapImage: "",
                                     summary: [""],
                                     flashcards: [{ f: "", b: "" }],
                                     questionPool: [{ question: "", options: ["", "", "", ""], correct: 0, expl: "" }],
