@@ -4580,15 +4580,50 @@
         const combinedChapters = useMemo(() => {
           const uGrade = userStats?.grade || "10";
           const allChapters = [...CHAPTERS_DATA, ...customLessonChapters];
-          return allChapters.map(ch => {
+          
+          let result = [];
+          allChapters.forEach(ch => {
             const extra = customLessonsData.filter(l => l.chapterId === ch.id && (l.targetGrade || "10") === uGrade);
             const extraIds = extra.map(e => e.id);
             const baseLessons = (ch.lessons || []).filter(l => (l.targetGrade || "10") === uGrade && !extraIds.includes(l.id));
-            return {
-              ...ch,
-              lessons: [...baseLessons, ...extra]
-            };
-          }).filter(ch => ch.lessons.length > 0 || userStats?.role === 'admin');
+            
+            const compiledLessons = [...baseLessons, ...extra];
+            
+            const titleMatch = (ch.title || "").trim().toLowerCase();
+            const existingIdx = result.findIndex(r => (r.title || "").trim().toLowerCase() === titleMatch);
+            
+            if (existingIdx !== -1) {
+              const existingLessons = result[existingIdx].lessons;
+              const newLessons = compiledLessons.filter(cl => !existingLessons.some(el => el.id === cl.id));
+              result[existingIdx].lessons = [...existingLessons, ...newLessons];
+            } else {
+              result.push({
+                ...ch,
+                lessons: compiledLessons
+              });
+            }
+          });
+
+          result.forEach(ch => {
+            ch.lessons.sort((a, b) => {
+              const matchA = (a.title || "").match(/B[aà]i\s*(\d+)/i);
+              const matchB = (b.title || "").match(/B[aà]i\s*(\d+)/i);
+              const numA = matchA ? parseInt(matchA[1], 10) : null;
+              const numB = matchB ? parseInt(matchB[1], 10) : null;
+              
+              if (numA !== null && numB !== null) {
+                return numA - numB;
+              } else if (numA !== null) {
+                return -1;
+              } else if (numB !== null) {
+                return 1;
+              } else {
+                return (a.title || "").localeCompare(b.title || "");
+              }
+            });
+          });
+
+          return result.filter(ch => ch.lessons.length > 0 || userStats?.role === 'admin');
         }, [customLessonsData, customLessonChapters, userStats?.grade, userStats?.role]);
         // --------------------------------
 
