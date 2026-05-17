@@ -4396,7 +4396,7 @@
               setManagedClassCodes(snap.docs.map(doc => doc.id));
           });
           return () => unsub();
-        }, [isDbReady, db, userStats]);
+        }, [isDbReady, db, userStats?.role, userStats?.userId]);
 
         // Fetch student class data
         const [studentClassData, setStudentClassData] = useState(null);
@@ -4741,11 +4741,15 @@
                 }
               };
               console.error('Firestore Error: ', JSON.stringify(errInfo));
-              alert("Lỗi tải bài học: Không đủ quyền. Hãy tải lại trang (chờ 1-2 phút để hệ thống cập nhật).");
+              if (err.message.includes("Quota") || err.message.includes("quota")) {
+                alert("Đã vượt quá hạn mức sử dụng (Quota) Firestore. Hạn mức sẽ được làm mới vào ngày tiếp theo.");
+              } else {
+                alert("Lỗi tải bài học: " + err.message);
+              }
             }
           };
           fetchCustomLessons();
-        }, [isDbReady, showAddLessonModal]);
+        }, [isDbReady, db]);
 
 // Fetch Problems for Contest Creation
         useEffect(() => {
@@ -4778,7 +4782,7 @@
             }
           };
           fetchAllProblems();
-        }, [showContestModal, showAdminModal, showCodingChapterModal, isDbReady, codingSubTab, tab, userStats, isAdmin]);
+        }, [isDbReady, db, userStats?.userId, userStats?.role, userStats?.class_code, isAdmin]);
 
         const [activeContests, setActiveContests] = useState([]);
         const [selectedContest, setSelectedContest] = useState(null);
@@ -4809,7 +4813,7 @@
           });
 
           return () => unsubscribe();
-        }, [isDbReady, userStats, isAdmin]);
+        }, [isDbReady, db, userStats?.class_code, userStats?.userClass, userStats?.role, isAdmin]);
 
         // Auth Logic
         const handleAuth = async () => {
@@ -5540,12 +5544,23 @@
               </div>
 
               {/* Rank Area */}
-              <div className="flex items-center gap-4">
-                {userStats && userStats.userName && (
-                  <div className="hidden sm:flex flex-col items-end relative">
+              <div className="flex items-center gap-2 sm:gap-4">
+                {(!userStats || !userStats.userName) ? (
+                  <button
+                    onClick={() => {
+                        setSetupStep("auth");
+                        setShowSetup(true);
+                    }}
+                    className="flex items-center gap-2 bg-blue-600 px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30"
+                  >
+                    <LucideIcon name="log-in" className="w-3 h-3 sm:w-4 sm:h-4" />
+                    Đăng nhập / Đăng ký
+                  </button>
+                ) : (
+                  <div className="flex flex-col items-end relative">
                     <button
                       onClick={() => setShowUserInfoCard(!showUserInfoCard)}
-                      className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors"
+                      className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 transition-colors"
                     >
                       {userStats.avatar ? (
                         <img
@@ -5655,7 +5670,7 @@
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-4 bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-lg shadow-slate-200/50 dark:shadow-none">
+                <div className="hidden sm:flex items-center gap-4 bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-lg shadow-slate-200/50 dark:shadow-none">
                   <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-2xl border border-slate-100 dark:border-slate-700 relative group">
                     <div
                       className={`w-1.5 h-1.5 rounded-full ${isDbReady ? (syncStatus === "error" ? "bg-red-500" : syncStatus === "syncing" ? "bg-yellow-500 animate-pulse" : "bg-green-500") : "bg-slate-300"}`}
