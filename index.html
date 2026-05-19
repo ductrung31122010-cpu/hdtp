@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Học Tập Tin học – Kết nối tri thức - Rank System</title>
+    <title>Học tập môn Tin học – Kết nối tri thức - Rank System</title>
 
     <!-- Libraries CDN -->
     <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
@@ -4708,47 +4708,44 @@
         // Fetch custom lessons
         useEffect(() => {
           if (!isDbReady || !db) return;
-          const fetchCustomLessons = async () => {
-            const fm = window.FirebaseModular;
-            try {
-              const q = fm.query(
-                fm.collection(db, "custom_lessons"),
-                fm.orderBy("createdAt", "asc")
-              );
-              const snap = await fm.getDocs(q);
-              setCustomLessonsData(
-                snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-              );
-              
-              const cq = fm.query(
-                fm.collection(db, "custom_lesson_chapters"),
-                fm.orderBy("createdAt", "asc")
-              );
-              const csnap = await fm.getDocs(cq);
-              setCustomLessonChapters(
-                csnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-              );
-            } catch (err) {
-              const authInfo = auth.currentUser || {};
-              const errInfo = {
-                error: err.message,
-                operationType: "list",
-                path: "custom_lessons",
-                authInfo: {
-                  userId: authInfo.uid,
-                  email: authInfo.email,
-                  isAnonymous: authInfo.isAnonymous
-                }
-              };
-              console.error('Firestore Error: ', JSON.stringify(errInfo));
-              if (err.message.includes("Quota") || err.message.includes("quota")) {
-                alert("Đã vượt quá hạn mức sử dụng (Quota) Firestore. Hạn mức sẽ được làm mới vào ngày tiếp theo.");
-              } else {
-                alert("Lỗi tải bài học: " + err.message);
-              }
-            }
+          const fm = window.FirebaseModular;
+          let unsubLessons, unsubChapters;
+          
+          try {
+            const q = fm.query(
+              fm.collection(db, "custom_lessons"),
+              fm.orderBy("createdAt", "asc")
+            );
+            unsubLessons = fm.onSnapshot(q, (snap) => {
+               const lessons = [];
+               snap.forEach(doc => {
+                 lessons.push({ id: doc.id, ...doc.data() });
+               });
+               setCustomLessonsData(lessons);
+            }, (err) => {
+               console.error("Error syncing custom lessons:", err);
+               if (err.message && err.message.toLowerCase().includes("quota")) {
+                 alert("Đã vượt quá hạn mức sử dụng (Quota) Firestore. Hạn mức sẽ được làm mới vào ngày tiếp theo.");
+               }
+            });
+            
+            const cq = fm.query(
+              fm.collection(db, "custom_lesson_chapters"),
+              fm.orderBy("createdAt", "asc")
+            );
+            unsubChapters = fm.onSnapshot(cq, (csnap) => {
+              const chapters = [];
+              csnap.forEach(doc => chapters.push({ id: doc.id, ...doc.data() }));
+              setCustomLessonChapters(chapters);
+            }, (err) => console.error("Error syncing custom chapters:", err));
+          } catch (err) {
+            console.error("Error setting up snapshots:", err);
+          }
+          
+          return () => {
+             if (unsubLessons) unsubLessons();
+             if (unsubChapters) unsubChapters();
           };
-          fetchCustomLessons();
         }, [isDbReady, db]);
 
 // Fetch Problems for Contest Creation
@@ -4906,7 +4903,12 @@
               setSetupStep("profile");
             }
           } catch (err) {
-            setAuthError("Lỗi hệ thống: " + err.message);
+            console.error("Auth error: ", err);
+            if (err.message && err.message.toLowerCase().includes("offline")) {
+               setAuthError("Máy chủ không phản hồi. Vui lòng kiểm tra lại 4G/Wifi hoặc tắt VPN/Trình chặn quảng cáo (Adblocker) và thử lại.");
+            } else {
+               setAuthError("Lỗi hệ thống: " + err.message);
+            }
           } finally {
             setIsSaving(false);
           }
@@ -5833,9 +5835,6 @@
                                      const fm = window.FirebaseModular;
                                      try {
                                          await fm.deleteDoc(fm.doc(db, "custom_lessons", lesson.id));
-                                         const customLessonsRef = fm.query(fm.collection(db, "custom_lessons"), fm.orderBy("createdAt", "asc"));
-                                         const snap = await fm.getDocs(customLessonsRef);
-                                         setCustomLessonsData(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
                                      } catch(e) { alert(e.message) }
                                  }
                               }}
@@ -5984,9 +5983,6 @@
                                  const fm = window.FirebaseModular;
                                  try {
                                      await fm.deleteDoc(fm.doc(db, "custom_lessons", lesson.id));
-                                     const customLessonsRef = fm.query(fm.collection(db, "custom_lessons"), fm.orderBy("createdAt", "asc"));
-                                     const snap = await fm.getDocs(customLessonsRef);
-                                     setCustomLessonsData(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
                                  } catch(e) { alert(e.message) }
                              }
                           }}
@@ -6001,7 +5997,7 @@
                 {currentView === 'honors' ? (
                   <HonorsPage isDbReady={isDbReady} db={db} setCurrentView={setCurrentView} />
                 ) : (
-                  <div className={`${["coding", "match", "contests"].includes(tab) ? "w-full h-full" : "max-w-4xl mx-auto space-y-12"}`}>
+                  <div className={`${["coding", "match", "contests"].includes(tab) ? "w-full h-full" : "max-w-6xl mx-auto space-y-4 md:space-y-6"}`}>
                     {!["coding", "match"].includes(tab) && <StudentClassJoiner userStats={userStats} isDbReady={isDbReady} db={db} setUserStats={setUserStats} studentClassData={studentClassData} />}
                   {!["coding", "match"].includes(tab) && (
                     activeLesson ? (
@@ -6012,11 +6008,11 @@
                         <span className="text-blue-500">{activeLesson.title}</span>
                       </div>
 
-                      <header className="space-y-6">
-                        <h2 className="text-4xl md:text-6xl font-display font-black tracking-tight leading-snug dark:text-white uppercase">
+                      <header className="space-y-4">
+                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-display font-black tracking-tighter leading-[0.9] dark:text-white uppercase">
                           {activeLesson.title}
                         </h2>
-                        <p className="text-xl text-slate-500 dark:text-slate-400 font-medium">
+                        <p className="text-xl text-slate-500 dark:text-slate-400 font-medium max-w-3xl">
                           Ôn tập các kiến thức trọng tâm và thực hành trắc nghiệm để
                           thăng hạng sao cấp bậc của bạn.
                         </p>
@@ -7543,14 +7539,6 @@
                                       alert("Thêm bài học thành công!");
                                   }
                                   
-                                  const customLessonsRef = fm.query(
-                                    fm.collection(db, "custom_lessons"),
-                                    fm.orderBy("createdAt", "asc")
-                                  );
-                                  const snap = await fm.getDocs(customLessonsRef);
-                                  setCustomLessonsData(
-                                    snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-                                  );
                                   setShowAddLessonModal(false);
                                   setEditingLessonId("");
                                   setAddLessonForm({
